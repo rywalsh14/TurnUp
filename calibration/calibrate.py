@@ -1,8 +1,5 @@
 # Main calibration code
 
-import numpy
-import pyaudio
-
 import pyaudio
 import struct
 import numpy as np
