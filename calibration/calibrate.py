@@ -7,7 +7,7 @@ import sys
 import sounddevice as sd
 from scipy.io import wavfile
 
-# SPECIFIC TO COMPUTER, NEED TO CHANGE FOR PI
+# Path to assets folder to store generated sound/plot files, SPECIFIC TO COMPUTER, NEED TO CHANGE FOR PI
 ASSETS_PATH = "/Users/Ryan/Developer/TurnUp/calibration/assets/"
 
 recordingDuration = 5   # duration of recording in seconds
@@ -24,7 +24,6 @@ print("Finished Recording")
 
 # Write recording to wav file
 wavfile.write(ASSETS_PATH + 'recording.wav', 44100, myrecording)
-
 
 # Read WAV file and plot
 samplerate, data = wavfile.read(ASSETS_PATH + 'recording.wav')
