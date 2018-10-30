@@ -16,5 +16,8 @@ sd.wait()               # wait to return until recording finished
 print("Finished Recording")
 
 sd.play(myrecording)
+
+# Print recorded values
 for i in myrecording:
     print(i)
+    
