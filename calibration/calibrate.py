@@ -1,29 +1,20 @@
 # Main calibration code
 
-import pyaudio
-import struct
-import numpy as np
+import numpy
+import sounddevice as sd
 
- 
-CHUNK = 1024 * 4         	# samples per frame
-FORMAT = pyaudio.paInt16 	# audio format (bytes per sample)
-CHANNELS = 1               	# single channel for microphone
-RATE = 44100                # samples per second
+recordingDuration = 5   # duration of recording in seconds
+fs = 44100              # sampling frequency
 
- 
- 
-p = pyaudio.PyAudio()
- 
-stream = p.open(
-    format=FORMAT,
-    channels=CHANNELS,
-    rate=RATE,
-    input=True,
-    output=True,
-    frames_per_buffer=CHUNK
-)
+# Set default values to be consistent through repeated use
+sd.default.samplerate = fs
+sd.default.channels = 1
 
-while True:
-    data = stream.read(CHUNK)					                #reading input	
-    data_int = struct.unpack(str(2 * CHUNK) + 'B', data) 	#converts bytes to integers
-    data_int	
+myrecording = sd.rec(int(recordingDuration * fs))
+
+sd.wait()               # wait to return until recording finished
+print("Finished Recording")
+
+sd.play(myrecording)
+for i in myrecording:
+    print(i)
