@@ -8,19 +8,27 @@ import sounddevice as sd
 from scipy.io import wavfile
 
 # Path to assets folder to store generated sound/plot files, SPECIFIC TO COMPUTER, NEED TO CHANGE FOR PI
-ASSETS_PATH = "/Users/Ryan/Developer/TurnUp/calibration/assets/"
+ASSETS_PATH = "/home/pi/Developer/TurnUp/calibration/assets/"
 
 recordingDuration = 5   # duration of recording in seconds
 fs = 44100              # sampling frequency
 
 # Set default values to be consistent through repeated use
 sd.default.samplerate = fs
-sd.default.channels = 2
+sd.default.channels = 1
 
 # Record
+print("Starting Recording")
 myrecording = sd.rec(int(recordingDuration * fs))
 sd.wait()   # wait to return until recording finished
 print("Finished Recording")
+
+# Playback on loop
+"""
+while True:
+	sd.play(myrecording)
+	sd.wait()
+"""
 
 # Write recording to wav file
 wavfile.write(ASSETS_PATH + 'recording.wav', 44100, myrecording)
@@ -30,7 +38,7 @@ samplerate, data = wavfile.read(ASSETS_PATH + 'recording.wav')
 times = numpy.arange(len(data))/float(samplerate)
 
 plt.figure(figsize=(30, 4))
-plt.fill_between(times, data[:,0], data[:,1], color='k') 
+plt.fill_between(times, data, color='k') 
 plt.xlim(times[0], times[-1])
 plt.xlabel('time (s)')
 plt.ylabel('amplitude')
