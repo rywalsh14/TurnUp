@@ -6,12 +6,31 @@ import wave
 import sys
 import sounddevice as sd
 from scipy.io import wavfile
+import audioop
+
+def calculatePower(fs, chunk, recording):
+	recLength = len(recording)
+	start = 0
+	stop = chunk-1
+	powerData = []
+	while start < recLength:
+		if stop >= recLength:
+			stop = recLength-1
+		rms = audioop.rms(recording[start:stop],1)
+		powerData.append(rms)
+		start += chunk
+		stop += chunk
+	return powerData
+
+
+
 
 # Path to assets folder to store generated sound/plot files, SPECIFIC TO COMPUTER, NEED TO CHANGE FOR PI
 ASSETS_PATH = "/home/pi/Developer/TurnUp/calibration/assets/"
 
 recordingDuration = 5   # duration of recording in seconds
 fs = 44100              # sampling frequency
+chunk = 4096
 
 # Set default values to be consistent through repeated use
 sd.default.samplerate = fs
@@ -22,6 +41,8 @@ print("Starting Recording")
 myrecording = sd.rec(int(recordingDuration * fs))
 sd.wait()   # wait to return until recording finished
 print("Finished Recording")
+
+powerData = calculatePower(fs, chunk, myrecording)
 
 # Playback on loop
 """
@@ -45,4 +66,7 @@ plt.ylabel('amplitude')
 # You can set the format by changing the extension
 # like .pdf, .svg, .eps
 plt.savefig(ASSETS_PATH + 'plot.png', dpi=100)
+
+plt.figure(figsize=(30,4))
+plt.plot(powerData)
 plt.show()
