@@ -5,6 +5,7 @@ from matplotlib import pyplot as plt
 import wave
 import sys
 import sounddevice as sd
+from scipy import signal
 from scipy.io import wavfile
 import audioop
 
@@ -12,14 +13,15 @@ def calculatePower(fs, chunk, recording):
 	recLength = len(recording)
 	start = 0
 	stop = chunk-1
+	increment = int(chunk/4)
 	powerData = []
 	while start < recLength:
 		if stop >= recLength:
 			stop = recLength-1
 		rms = audioop.rms(recording[start:stop],1)
 		powerData.append(rms)
-		start += chunk
-		stop += chunk
+		start += increment
+		stop += increment
 	return powerData
 
 
@@ -41,8 +43,13 @@ print("Starting Recording")
 myrecording = sd.rec(int(recordingDuration * fs))
 sd.wait()   # wait to return until recording finished
 print("Finished Recording")
+print(myrecording)
 
-powerData = calculatePower(fs, chunk, myrecording)
+# Filter Recording
+h = signal.firwin(numtaps=250, cutoff=100, nyq=fs/2)
+filteredRecording = numpy.ascontiguousarray(signal.lfilter(h, 1.0, myrecording, zi=None))
+print(filteredRecording)
+powerData = calculatePower(fs, chunk, filteredRecording)
 
 # Playback on loop
 """
