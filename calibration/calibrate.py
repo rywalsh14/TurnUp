@@ -30,8 +30,8 @@ def calculateMax(fs, chunk, recordingDuration, recording):
     return powerData
 
 def calculatePower(fs, chunk, recordingDuration, recording):
-    recLength = len(recording[:,1])
     recording = audioop.tomono(recording, 2, 1, 1)
+    recLength = len(recording)
     start = 0
     stop = chunk-1
     powerData = []
@@ -43,6 +43,14 @@ def calculatePower(fs, chunk, recordingDuration, recording):
         start = start + chunk
         stop = stop + chunk
     return powerData
+
+
+
+#def audio_callback(indata, frames, time, status):
+#   volume_norm = np.linalg.norm(indata) * 10
+#   print("|" * int(volume_norm))
+
+#def calculateVolume()
 
 
 
@@ -68,14 +76,13 @@ powerData = calculateMax(fs, chunk, recordingDuration, myrecording)
 
     
     
-    
-    
 # Write recording to wav file
 wavfile.write(ASSETS_PATH + 'recording.wav', 44100, myrecording)
 
 # Read WAV file and plot
 samplerate, data = wavfile.read(ASSETS_PATH + 'recording.wav')
 times = numpy.arange(len(data))/float(samplerate)
+
 
 plt.figure(figsize=(30, 4))
 plt.fill_between(times, data[:,0], data[:,1], color='k') 
