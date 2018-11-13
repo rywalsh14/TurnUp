@@ -30,7 +30,7 @@ ASSETS_PATH = "/home/pi/Developer/TurnUp/calibration/assets/"
 
 recordingDuration = 5   # duration of recording in seconds
 fs = 44100              # sampling frequency
-chunk = 4096
+chunk = 2048
 
 # Set default values to be consistent through repeated use
 sd.default.samplerate = fs
