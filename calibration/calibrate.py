@@ -46,11 +46,11 @@ print("Finished Recording")
 print(myrecording)
 
 # Filter Recording
-h = signal.firwin(numtaps=250, cutoff=100, nyq=fs/2)
-filteredRecording = numpy.ascontiguousarray(signal.lfilter(h, 1.0, myrecording, zi=None))
-print(filteredRecording)
-powerData = calculatePower(fs, chunk, filteredRecording)
-
+#h = signal.firwin(numtaps=250, cutoff=100, nyq=fs/2)
+#filteredRecording = numpy.ascontiguousarray(signal.lfilter(h, 1.0, myrecording, zi=None))
+#print(filteredRecording)
+#powerData = calculatePower(fs, chunk, filteredRecording)
+powerData = calculatePower(fs, chunk, myrecording)
 # Playback on loop
 """
 while True:
