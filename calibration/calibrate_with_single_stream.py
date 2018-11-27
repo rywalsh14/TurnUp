@@ -84,9 +84,12 @@ def input_callback(in_data, frame_count, time_info, status):
     return(calibrateData, pyaudio.paContinue)
 
 def mic_callback(mic_data, frame_count, time_info, status):
+    calibrateData = calibrateWave.readframes(CHUNK)
+    calibratePower = audioop.rms(calibrateData, 2)
+    calibratePowerData.append(calibratePower)
     micPower = audioop.rms(mic_data, 2)
     micPowerData.append(micPower)
-    return(mic_data, pyaudio.paContinue)
+    return(calibrateData, pyaudio.paContinue)
 
 # Begin main thread of code
 audio = pyaudio.PyAudio()
@@ -94,37 +97,40 @@ audio = pyaudio.PyAudio()
 # FOR MAC - built-in mic has device ID 0, USB Audio device has device ID 2
 # FOR PI - input audio has device ID 2, mic audio has device ID 3
 # Open input stream source
-inputStream = audio.open(format=audio.get_format_from_width(calibrateWave.getsampwidth()),
-                    channels=calibrateWave.getnchannels(),
-                    rate=calibrateWave.getframerate(),
-                    output=True,
-                    frames_per_buffer=CHUNK,
-                    stream_callback=input_callback)
 
 
 # Open mic stream souce
 micStream = audio.open(format=FORMAT, 
                     input_device_index=getMicDeviceID(audio),
-                    channels=CHANNELS,
+                    channels=1,
                     rate=RATE, 
                     input=True,
+                    output=True,
                     frames_per_buffer=CHUNK,
                     stream_callback=mic_callback)
 
 
-inputStream.start_stream()
+
+
 micStream.start_stream()
 
-while inputStream.is_active():
+while micStream.is_active():
     print("Starting recording")
     time.sleep(RECORD_SECONDS)
-    inputStream.stop_stream()
+    micStream.stop_stream()
 
-micStream.stop_stream()
+
 micStream.close()
-inputStream.close()
 audio.terminate()
 
+
+lowerBound = min(calibratePowerData)
+upperBound = max(calibratePowerData)
+m, b = np.polyfit(calibratePowerData, micPowerData[0:len(calibratePowerData)], 1)
+x = np.linspace(lowerBound, upperBound)
+y = []
+for i in range(0, len(x)):
+    y.append(m*x[i]+b)
 
 plt.figure(figsize=(30,4))
 plt.plot(micPowerData)
@@ -135,4 +141,5 @@ plt.plot(calibratePowerData)
 
 plt.figure(figsize=(30,4))
 plt.plot(calibratePowerData, micPowerData[0:len(calibratePowerData)], 'ro')
+plt.plot(x, y, 'b-')
 plt.show()
