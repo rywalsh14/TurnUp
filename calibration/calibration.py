@@ -13,7 +13,7 @@ FORMAT = pyaudio.paInt16
 CHANNELS = 1
 RATE = 44100
 CHUNK = 512
-RECORD_SECONDS = 5
+RECORD_SECONDS = 10
 INPUT_FILENAME = "input.wav"
 MIC_FILENAME = "mic.wav"
 POWER_WINDOW = 2048
@@ -71,16 +71,17 @@ def getMicDeviceID(audio):
 
 
 
-# wf = wave.open("input.wav", 'rb')
+calibrateWave = wave.open("calibration.wav", 'rb')
 
-inputPowerData = []
+calibratePowerData = []
 micPowerData = []
 
-scale = 1
+scale = 0.2
 def input_callback(in_data, frame_count, time_info, status):
-    inputPower = audioop.rms(in_data, 2)
-    inputPowerData.append(inputPower)
-    multData = audioop.mul(in_data, 2, scale)
+    calibrateData = calibrateWave.readframes(frame_count)
+    calibratePower = audioop.rms(calibrateData, 2)
+    calibratePowerData.append(calibratePower)
+    multData = audioop.mul(calibrateData, 2, scale)
     return(multData, pyaudio.paContinue)
 
 def mic_callback(mic_data, frame_count, time_info, status):
@@ -94,11 +95,9 @@ audio = pyaudio.PyAudio()
 # FOR MAC - built-in mic has device ID 0, USB Audio device has device ID 2
 # FOR PI - input audio has device ID 2, mic audio has device ID 3
 # Open input stream source
-inputStream = audio.open(format=FORMAT, 
-                    input_device_index=getInputDeviceID(audio),
+inputStream = audio.open(format=FORMAT,
                     channels=CHANNELS,
-                    rate=RATE, 
-                    input=True,
+                    rate=RATE,
                     output=True,
                     frames_per_buffer=CHUNK,
                     stream_callback=input_callback)
@@ -132,10 +131,10 @@ audio.terminate()
 plt.figure(figsize=(30,4))
 plt.plot(micPowerData)
 plt.figure(figsize=(30,4))
-plt.plot(inputPowerData)
+plt.plot(calibratePowerData)
 
 
 
 plt.figure(figsize=(30,4))
-plt.plot(inputPowerData, micPowerData[0:len(inputPowerData)], 'ro')
+plt.plot(calibratePowerData, micPowerData[0:len(calibratePowerData)], 'ro')
 plt.show()
