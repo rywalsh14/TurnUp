@@ -6,6 +6,7 @@ from scipy import signal
 from scipy.io import wavfile
 import audioop
 import numpy as np
+import time
 
 
 FORMAT = pyaudio.paInt16
@@ -50,14 +51,24 @@ def playWavFile(fileName, chunk):
     p.terminate()
     return
 
-"""
-wf = wave.open("livewave.wav", 'rb')
 
-def callback(in_data, frame_count, time_info, status):
-    data = wf.readframes(fram_count)
-    return(data, pyaudio.paContinue)
-"""
 
+# wf = wave.open("input.wav", 'rb')
+
+inputPowerData = []
+micPowerData = []
+
+scale = 1
+def input_callback(in_data, frame_count, time_info, status):
+    inputPower = audioop.rms(in_data, 2)
+    inputPowerData.append(inputPower)
+    multData = audioop.mul(in_data, 2, scale)
+    return(multData, pyaudio.paContinue)
+
+def mic_callback(mic_data, frame_count, time_info, status):
+    micPower = audioop.rms(mic_data, 2)
+    micPowerData.append(micPower)
+    return(mic_data, pyaudio.paContinue)
 
 """
 def calcPower(powerWindow, recording):
@@ -89,37 +100,59 @@ audio = pyaudio.PyAudio()
 # FOR PI - input audio has device ID 2, mic audio has device ID 3
 # Open input stream source
 inputStream = audio.open(format=FORMAT, 
-                    input_device_index=2,
-                    channels=CHANNELS,
-                    rate=RATE, 
-                    input=True,
-                    frames_per_buffer=CHUNK)
-
-
-# Open mic stream souce
-micStream = audio.open(format=FORMAT, 
                     input_device_index=3,
                     channels=CHANNELS,
                     rate=RATE, 
                     input=True,
-                    frames_per_buffer=CHUNK)
-
-outputStream = audio.open(format=FORMAT,
-                        channels=CHANNELS,
-                          rate=RATE,
-                          output=True,
-                          frames_per_buffer=CHUNK)
+                    output=True,
+                    frames_per_buffer=CHUNK,
+                    stream_callback=input_callback)
 
 
+# Open mic stream souce
+micStream = audio.open(format=FORMAT, 
+                    input_device_index=2,
+                    channels=CHANNELS,
+                    rate=RATE, 
+                    input=True,
+                    frames_per_buffer=CHUNK,
+                    stream_callback=mic_callback)
 
 
+
+inputStream.start_stream()
+micStream.start_stream()
+
+while inputStream.is_active():
+    print("Starting recording")
+    time.sleep(RECORD_SECONDS)
+    inputStream.stop_stream()
+
+micStream.stop_stream()
+micStream.close()
+inputStream.close()
+audio.terminate()
+
+"""
+plt.figure(figsize=(30,4))
+plt.plot(micPowerData)
+plt.figure(figsize=(30,4))
+plt.plot(inputPowerData)
+
+"""
+
+plt.figure(figsize=(30,4))
+plt.plot(inputPowerData, micPowerData[0:len(inputPowerData)], 'ro')
+plt.show()
+
+
+"""
 print("recording...")
 inputFrames = []
 micFrames = []
  
 for i in range(0, int(RATE / CHUNK * RECORD_SECONDS)):
     inputData = inputStream.read(CHUNK)
-    outputStream.write(inputData, CHUNK)
     micData = micStream.read(CHUNK, exception_on_overflow=False)
     inputFrames.append(inputData)
     micFrames.append(micData)
@@ -129,8 +162,6 @@ print("finished recording")
 # stop Recording
 inputStream.stop_stream()
 micStream.stop_stream()
-outputStream.stop_stream()
-outputStream.close()
 inputStream.close()
 micStream.close()
 audio.terminate()
@@ -146,7 +177,7 @@ plt.figure(figsize=(30,4))
 plt.plot(inputPowerData)
 plt.show()
 
-
+"""
 
 
 """
