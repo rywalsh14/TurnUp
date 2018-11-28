@@ -18,6 +18,17 @@ INPUT_FILENAME = "input.wav"
 MIC_FILENAME = "mic.wav"
 POWER_WINDOW = 2048
 
+
+
+
+
+M = 0.2796542912043009
+B = 113.75075181276796
+THRESHOLD = 1.5
+
+
+
+
 # use this to query and display available audio devices
 def showDevices(audio):
     info = audio.get_host_api_info_by_index(0)
@@ -71,17 +82,62 @@ def getMicDeviceID(audio):
             return i
     return -1
 
+# buffers to hold x points of input/mic power, where x is the window size of the power we want to average over
+inputPowerBuffer = []
+micPowerBuffer = []
+
 inputPowerData = []
 micPowerData = []
 
+micPower = 0
+
+expectedMicPowerData = []
+
+# MIGHT NEED TO CHANGE INIT
+avgExpectedMicPower = 0
+avgMicPower = 0
+
+
+#powerDiffAvg = 0
+#powerDiffData = []
+
+#FOR Visualization Purposes
+avgExpectedMicPowerData = []
+avgMicPowerData = []
+
+
 scale = 1
 def input_callback(in_data, frame_count, time_info, status):
+    global avgExpectedMicPower, avgMicPower, scale
+    
+    in_data = audioop.mul(in_data, 2, scale)
+    
     inputPower = audioop.rms(in_data, 2)
     inputPowerData.append(inputPower)
+    
+    expectedMicPower = M*inputPower + B
+    expectedMicPowerData.append(expectedMicPower)
+    
+    avgExpectedMicPower = 0.01*expectedMicPower + 0.99*avgExpectedMicPower
+    avgMicPower = 0.01*micPower + 0.99*avgMicPower
+    avgExpectedMicPowerData.append(avgExpectedMicPower)
+    avgMicPowerData.append(avgMicPower)
+    
+    ratio = avgMicPower/avgExpectedMicPower
+    if ratio > THRESHOLD:
+        scale += 0.5
+    elif scale > 1:
+        scale -= 0.5
+    
+    
+    #powerDiff = micPower - expectedMicPower
+    #powerDiffData.append(powerDiff)
+    
     multData = audioop.mul(in_data, 2, scale)
-    return(multData, pyaudio.paContinue)
+    return(in_data, pyaudio.paContinue)
 
 def mic_callback(mic_data, frame_count, time_info, status):
+    global micPower
     micPower = audioop.rms(mic_data, 2)
     micPowerData.append(micPower)
     return(mic_data, pyaudio.paContinue)
@@ -136,6 +192,13 @@ micStream = audio.open(format=FORMAT,
 
 
 
+
+
+
+
+
+
+
 inputStream.start_stream()
 micStream.start_stream()
 
@@ -156,11 +219,28 @@ plt.figure(figsize=(30,4))
 plt.plot(inputPowerData)
 
 """
-
+"""
 plt.figure(figsize=(30,4))
 plt.plot(inputPowerData, micPowerData[0:len(inputPowerData)], 'ro')
 plt.show()
+"""
 
+
+
+
+plt.figure(figsize=(30,4))
+plt.plot(micPowerData,'r-')
+plt.plot(expectedMicPowerData, 'g-')
+
+
+#plt.figure(figsize=(30,4))
+#plt.plot(powerDiffData)
+
+plt.figure(figsize=(30,4))
+plt.plot(avgExpectedMicPowerData)
+plt.plot(avgMicPowerData)
+
+plt.show()
 
 """
 print("recording...")
