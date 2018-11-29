@@ -7,27 +7,16 @@ from scipy.io import wavfile
 import audioop
 import numpy as np
 import time
-
+from calibrate import calibrate
 
 FORMAT = pyaudio.paInt16
 CHANNELS = 1
 RATE = 44100
 CHUNK = 512
-RECORD_SECONDS = 10
-INPUT_FILENAME = "input.wav"
-MIC_FILENAME = "mic.wav"
-POWER_WINDOW = 2048
+LISTEN_SECONDS = 10
 
-
-
-
-
-M = 0.2796542912043009
-B = 113.75075181276796
 THRESHOLD = 1.5
-
-
-
+MAX_SCALE = 16
 
 # use this to query and display available audio devices
 def showDevices(audio):
@@ -62,9 +51,8 @@ def playWavFile(fileName, chunk):
     p.terminate()
     return
 
-
-
 def getInputDeviceID(audio):
+    second = False
     info = audio.get_host_api_info_by_index(0)
     numdevices = info.get('deviceCount')
     for i in range(0, numdevices):
@@ -74,6 +62,7 @@ def getInputDeviceID(audio):
     return -1
 
 def getMicDeviceID(audio):
+    second = False
     info = audio.get_host_api_info_by_index(0)
     numdevices = info.get('deviceCount')
     for i in range(0, numdevices):
@@ -81,6 +70,22 @@ def getMicDeviceID(audio):
         if "USB audio CODEC" in name:
             return i
     return -1
+
+def getTimeValues(rate, chunk, numPoints):
+    numSamples = numPoints * chunk
+    totalTime = numSamples/rate
+    t = np.linspace(0, totalTime, numPoints)
+    return t
+
+print("Welcome to TurnUp!")
+input("Press \'Enter\' to begin calibration")
+
+M, B = calibrate(plot=True)
+print("Completed calibration stage and received the following parameters:")
+print("\tM = " + str(M))
+print("\tB = " + str(B))
+
+input("Press \'Enter\' to begin listening")
 
 # buffers to hold x points of input/mic power, where x is the window size of the power we want to average over
 inputPowerBuffer = []
@@ -107,6 +112,8 @@ avgMicPowerData = []
 
 
 scale = 1
+scaleData = []
+ratioData = []
 def input_callback(in_data, frame_count, time_info, status):
     global avgExpectedMicPower, avgMicPower, scale
     
@@ -124,11 +131,14 @@ def input_callback(in_data, frame_count, time_info, status):
     avgMicPowerData.append(avgMicPower)
     
     ratio = avgMicPower/avgExpectedMicPower
+    ratioData.append(ratio)
+
     if ratio > THRESHOLD:
+        scale = min(scale+0.5, MAX_SCALE)
         scale += 0.5
     elif scale > 1:
         scale -= 0.5
-    
+    scaleData.append(scale)
     
     #powerDiff = micPower - expectedMicPower
     #powerDiffData.append(powerDiff)
@@ -141,29 +151,6 @@ def mic_callback(mic_data, frame_count, time_info, status):
     micPower = audioop.rms(mic_data, 2)
     micPowerData.append(micPower)
     return(mic_data, pyaudio.paContinue)
-
-"""
-def calcPower(powerWindow, recording):
-    recLength = len(recording)
-    start = 0
-    stop = powerWindow-1
-    increment = int(powerWindow/4)
-    avgData = []
-    while start < recLength:
-            if stop >= recLength:
-                    stop = recLength-1
-            avg = audioop.rms(recording[start:stop],2)
-            avgData.append(avg)
-            start += increment
-            stop += increment
-    return avgData
-"""
-
-def calcPower(powerWindow, recording):
-    avgData = []
-    for chunk in recording:
-        avgData.append(audioop.rms(chunk, 2))
-    return avgData
 
 # Begin main thread of code
 audio = pyaudio.PyAudio()
@@ -190,21 +177,12 @@ micStream = audio.open(format=FORMAT,
                     frames_per_buffer=CHUNK,
                     stream_callback=mic_callback)
 
-
-
-
-
-
-
-
-
-
 inputStream.start_stream()
 micStream.start_stream()
 
 while inputStream.is_active():
-    print("Starting recording")
-    time.sleep(RECORD_SECONDS)
+    print("Beginning listening...")
+    time.sleep(LISTEN_SECONDS)
     inputStream.stop_stream()
 
 micStream.stop_stream()
@@ -212,92 +190,75 @@ micStream.close()
 inputStream.close()
 audio.terminate()
 
-"""
-plt.figure(figsize=(30,4))
-plt.plot(micPowerData)
-plt.figure(figsize=(30,4))
-plt.plot(inputPowerData)
+print("Finished listening")
+
+# Power data plot
+micPowerTimeVals = getTimeValues(RATE, CHUNK, len(micPowerData))
+expectedMicPowerTimeVals = getTimeValues(RATE, CHUNK, len(expectedMicPowerData))
+micPowerFig = plt.figure(figsize=(30,4))
+micPowerFig.suptitle('Mic Power & Expected Mic Power over Time', fontsize=14, fontweight='bold')
+micPowerPlot, = plt.plot(micPowerTimeVals, 
+                         micPowerData,
+                         label="Actual Mic Power")
+expMicPowerPlot, = plt.plot(expectedMicPowerTimeVals, 
+                            expectedMicPowerData,
+                            label="Expected Mic Power")
+plt.xlabel('Time (s)')
+plt.ylabel('UNITS')
+plt.legend(handles=[micPowerPlot, expMicPowerPlot])
+
+# Plot of moving average of power
+avgMicPowerTimeVals = getTimeValues(RATE, CHUNK, len(avgMicPowerData))
+avgExpectedMicPowerTimeVals = getTimeValues(RATE, CHUNK, len(avgExpectedMicPowerData))
+movingAvgFig = plt.figure(figsize=(30,4))
+movingAvgFig.suptitle('Moving Averages of Mic Power & Expected Mic Power over Time', fontsize=14, fontweight='bold')
+avgMicPowerPlot, = plt.plot(avgMicPowerTimeVals, 
+                            avgMicPowerData,
+                            label="Mic Power Moving Average")
+avgExpMicPowerPlot, = plt.plot(avgExpectedMicPowerTimeVals,
+                               avgExpectedMicPowerData,
+                               label="Expected Mic Power Moving Average")
+plt.xlabel('Time (s)')
+plt.ylabel('UNITS')
+plt.legend(handles=[avgMicPowerPlot, avgExpMicPowerPlot])
 
 """
+# Plot of the scale factor over time
+scaleTimeVals = getTimeValues(RATE, CHUNK, len(scaleData))
+scaleFig = plt.figure(figsize=(30,4))
+scaleFig.suptitle('Scale Factor over Time', fontsize=14, fontweight='bold')
+plt.plot(scaleTimeVals, scaleData)
+plt.xlabel('Time (s)')
+plt.ylabel('Magnitude')
 """
-plt.figure(figsize=(30,4))
-plt.plot(inputPowerData, micPowerData[0:len(inputPowerData)], 'ro')
+
+# Plot of scale factor & ratio over time on same plot
+scaleTimeVals = getTimeValues(RATE, CHUNK, len(scaleData))
+ratioTimeVals = getTimeValues(RATE, CHUNK, len(ratioData))
+scaleRatioFig = plt.figure(figsize=(30,4))
+scaleRatioFig.suptitle('Scale Factor over Time', fontsize=14, fontweight='bold')
+
+
+# First plot ratio
+color = 'tab:red'
+ax1 = scaleRatioFig.add_subplot(111)
+ax1.set_xlabel('Time (s)')
+ax1.set_ylabel('Ratio Magnitude', color=color)
+ax1.plot(ratioTimeVals, ratioData, color=color)
+ax1.tick_params(axis='y', labelcolor=color)
+
+# Next plot a line on the threshold
+threshLine = []
+for i in range (0, len(ratioTimeVals)):
+    threshLine.append(THRESHOLD)
+plt.plot(ratioTimeVals, threshLine, color="gray", linestyle='dashed')
+
+ax2 = ax1.twinx()
+
+# Then plot scale
+color = "tab:blue"
+ax2.set_ylabel('Scale Magnitude', color=color)
+ax2.plot(scaleTimeVals, scaleData, color=color)
+ax2.tick_params(axis='y', labelcolor=color)
+
 plt.show()
-"""
-
-
-
-
-plt.figure(figsize=(30,4))
-plt.plot(micPowerData,'r-')
-plt.plot(expectedMicPowerData, 'g-')
-
-
-#plt.figure(figsize=(30,4))
-#plt.plot(powerDiffData)
-
-plt.figure(figsize=(30,4))
-plt.plot(avgExpectedMicPowerData)
-plt.plot(avgMicPowerData)
-
-plt.show()
-
-"""
-print("recording...")
-inputFrames = []
-micFrames = []
- 
-for i in range(0, int(RATE / CHUNK * RECORD_SECONDS)):
-    inputData = inputStream.read(CHUNK)
-    micData = micStream.read(CHUNK, exception_on_overflow=False)
-    inputFrames.append(inputData)
-    micFrames.append(micData)
-
-print("finished recording")
- 
-# stop Recording
-inputStream.stop_stream()
-micStream.stop_stream()
-inputStream.close()
-micStream.close()
-audio.terminate()
-
-
-micPowerData = calcPower(POWER_WINDOW, micFrames)
-inputPowerData = calcPower(POWER_WINDOW, inputFrames)
-
-
-plt.figure(figsize=(30,4))
-plt.plot(micPowerData)
-plt.figure(figsize=(30,4))
-plt.plot(inputPowerData)
-plt.show()
-
-"""
-
-
-"""
-
-# write input wav file
-waveFile = wave.open(INPUT_FILENAME, 'wb')
-waveFile.setnchannels(CHANNELS)
-waveFile.setsampwidth(audio.get_sample_size(FORMAT))
-waveFile.setframerate(RATE)
-waveFile.writeframes(b''.join(inputFrames))
-waveFile.close()
-
-# write mic wav file
-waveFile = wave.open(MIC_FILENAME, 'wb')
-waveFile.setnchannels(CHANNELS)
-waveFile.setsampwidth(audio.get_sample_size(FORMAT))
-waveFile.setframerate(RATE)
-waveFile.writeframes(b''.join(micFrames))
-waveFile.close()
-
-# Playback input data and mic data
-while True:
-    print("Playing Input Recording...")
-    playWavFile(INPUT_FILENAME, CHUNK)
-    print("Playing Mic Recording...")
-    playWavFile(MIC_FILENAME, CHUNK)
-"""
