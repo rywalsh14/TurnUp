@@ -1,13 +1,17 @@
+import sys, os
+sys.path.append(os.path.abspath(".."))
 import pyaudio
 import wave
 from matplotlib import pyplot as plt
-import sys
 from scipy import signal
 from scipy.io import wavfile
 import audioop
 import numpy as np
 import time
+import json
 from calibrate import calibrate
+from utils import getInputDeviceID, getMicDeviceID, getTimeValues
+
 
 FORMAT = pyaudio.paInt16
 CHANNELS = 1
@@ -51,39 +55,49 @@ def playWavFile(fileName, chunk):
     p.terminate()
     return
 
-def getInputDeviceID(audio):
-    second = False
-    info = audio.get_host_api_info_by_index(0)
-    numdevices = info.get('deviceCount')
-    for i in range(0, numdevices):
-        name = audio.get_device_info_by_host_api_device_index(0, i).get('name')
-        if "C-Media USB Headphone Set" in name:
-            return i
-    return -1
-
-def getMicDeviceID(audio):
-    second = False
-    info = audio.get_host_api_info_by_index(0)
-    numdevices = info.get('deviceCount')
-    for i in range(0, numdevices):
-        name = audio.get_device_info_by_host_api_device_index(0, i).get('name')
-        if "USB audio CODEC" in name:
-            return i
-    return -1
-
-def getTimeValues(rate, chunk, numPoints):
-    numSamples = numPoints * chunk
-    totalTime = numSamples/rate
-    t = np.linspace(0, totalTime, numPoints)
-    return t
+# Converts user yes/no response to boolean value
+def readYesOrNo(input):
+    responses = {
+        "YES": True,
+        "Yes": True,
+        "yes": True,
+        "Y": True,
+        "y": True,
+        "NO": False,
+        "No": False,
+        "no": False,
+        "N": False,
+        "n": False
+    }
+    if input in responses:
+        return responses[input]
+    return None
 
 print("Welcome to TurnUp!")
-input("Press \'Enter\' to begin calibration")
+# Prompt user for if they would like to recalibrate
+recalibrate = readYesOrNo(input("Would you like to recalibrate? (Y/N): "))
+if recalibrate == None:
+    while recalibrate == None:
+        print("Must answer \'YES\' or \'NO\'!")
+        recalibrate = readYesOrNo(input("Would you like to recalibrate? (Y/N): "))
 
-M, B = calibrate(plot=True)
-print("Completed calibration stage and received the following parameters:")
-print("\tM = " + str(M))
-print("\tB = " + str(B))
+if recalibrate:
+    # Run through calibration process
+    input("Press \'Enter\' to begin calibration")
+    M, B = calibrate()
+    print("Completed calibration stage and received the following parameters:")
+    print("\tM = " + str(M))
+    print("\tB = " + str(B))
+else:
+    print('Okay! Loading last saved parameters from \'calibration_parameters.json\'...')
+    # Load calibration parameters from calibration_parameters.json
+    with open('calibration_parameters.json') as parameterFile:
+        parameters = json.load(parameterFile)
+    M = parameters['M']
+    B = parameters['B']
+    print("Loaded the following parameters:")
+    print("\tM = " + str(M))
+    print("\tB = " + str(B))
 
 input("Press \'Enter\' to begin listening")
 
@@ -132,10 +146,9 @@ def input_callback(in_data, frame_count, time_info, status):
     
     ratio = avgMicPower/avgExpectedMicPower
     ratioData.append(ratio)
-
+    
     if ratio > THRESHOLD:
         scale = min(scale+0.5, MAX_SCALE)
-        scale += 0.5
     elif scale > 1:
         scale -= 0.5
     scaleData.append(scale)
@@ -195,7 +208,7 @@ print("Finished listening")
 # Power data plot
 micPowerTimeVals = getTimeValues(RATE, CHUNK, len(micPowerData))
 expectedMicPowerTimeVals = getTimeValues(RATE, CHUNK, len(expectedMicPowerData))
-micPowerFig = plt.figure(figsize=(30,4))
+micPowerFig = plt.figure(figsize=(30,10))
 micPowerFig.suptitle('Mic Power & Expected Mic Power over Time', fontsize=14, fontweight='bold')
 micPowerPlot, = plt.plot(micPowerTimeVals, 
                          micPowerData,
@@ -210,7 +223,7 @@ plt.legend(handles=[micPowerPlot, expMicPowerPlot])
 # Plot of moving average of power
 avgMicPowerTimeVals = getTimeValues(RATE, CHUNK, len(avgMicPowerData))
 avgExpectedMicPowerTimeVals = getTimeValues(RATE, CHUNK, len(avgExpectedMicPowerData))
-movingAvgFig = plt.figure(figsize=(30,4))
+movingAvgFig = plt.figure(figsize=(30,10))
 movingAvgFig.suptitle('Moving Averages of Mic Power & Expected Mic Power over Time', fontsize=14, fontweight='bold')
 avgMicPowerPlot, = plt.plot(avgMicPowerTimeVals, 
                             avgMicPowerData,
@@ -222,30 +235,16 @@ plt.xlabel('Time (s)')
 plt.ylabel('UNITS')
 plt.legend(handles=[avgMicPowerPlot, avgExpMicPowerPlot])
 
-"""
-# Plot of the scale factor over time
-scaleTimeVals = getTimeValues(RATE, CHUNK, len(scaleData))
-scaleFig = plt.figure(figsize=(30,4))
-scaleFig.suptitle('Scale Factor over Time', fontsize=14, fontweight='bold')
-plt.plot(scaleTimeVals, scaleData)
-plt.xlabel('Time (s)')
-plt.ylabel('Magnitude')
-"""
-
 # Plot of scale factor & ratio over time on same plot
 scaleTimeVals = getTimeValues(RATE, CHUNK, len(scaleData))
 ratioTimeVals = getTimeValues(RATE, CHUNK, len(ratioData))
-scaleRatioFig = plt.figure(figsize=(30,4))
-scaleRatioFig.suptitle('Scale Factor over Time', fontsize=14, fontweight='bold')
-
+scaleRatioFig = plt.figure(figsize=(30,10))
+scaleRatioFig.suptitle('Scale Factor and Avg. Expected Mic Power to Avg Mic Power Ratio over Time', fontsize=14, fontweight='bold')
 
 # First plot ratio
-color = 'tab:red'
-ax1 = scaleRatioFig.add_subplot(111)
-ax1.set_xlabel('Time (s)')
-ax1.set_ylabel('Ratio Magnitude', color=color)
-ax1.plot(ratioTimeVals, ratioData, color=color)
-ax1.tick_params(axis='y', labelcolor=color)
+plt.subplot(211)
+plt.plot(ratioTimeVals, ratioData, color="tab:red")
+plt.ylabel('Ratio Magnitude')
 
 # Next plot a line on the threshold
 threshLine = []
@@ -253,12 +252,10 @@ for i in range (0, len(ratioTimeVals)):
     threshLine.append(THRESHOLD)
 plt.plot(ratioTimeVals, threshLine, color="gray", linestyle='dashed')
 
-ax2 = ax1.twinx()
-
-# Then plot scale
-color = "tab:blue"
-ax2.set_ylabel('Scale Magnitude', color=color)
-ax2.plot(scaleTimeVals, scaleData, color=color)
-ax2.tick_params(axis='y', labelcolor=color)
+# Now plot the scale on a separate Subplot
+plt.subplot(212)
+plt.plot(scaleTimeVals, scaleData, color="tab:blue")
+plt.xlabel('Time (s)')
+plt.ylabel('Scale Magnitude')
 
 plt.show()

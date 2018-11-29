@@ -1,12 +1,15 @@
+import sys, os
+sys.path.append(os.path.abspath(".."))
 import pyaudio
 import wave
 from matplotlib import pyplot as plt
-import sys
 from scipy import signal
 from scipy.io import wavfile
 import audioop
 import numpy as np
 import time
+import json
+from utils import getInputDeviceID, getMicDeviceID, getTimeValues
 
 
 FORMAT = pyaudio.paInt16
@@ -14,9 +17,6 @@ CHANNELS = 1
 RATE = 44100
 CHUNK = 512
 RECORD_SECONDS = 10
-INPUT_FILENAME = "input.wav"
-MIC_FILENAME = "mic.wav"
-POWER_WINDOW = 2048
 
 # use this to query and display available audio devices
 def showDevices(audio):
@@ -50,30 +50,6 @@ def playWavFile(fileName, chunk):
     #close PyAudio  
     p.terminate()
     return
-
-def getInputDeviceID(audio):
-    info = audio.get_host_api_info_by_index(0)
-    numdevices = info.get('deviceCount')
-    for i in range(0, numdevices):
-        name = audio.get_device_info_by_host_api_device_index(0, i).get('name')
-        if "C-Media USB Headphone Set" in name:
-            return i
-    return -1
-
-def getMicDeviceID(audio):
-    info = audio.get_host_api_info_by_index(0)
-    numdevices = info.get('deviceCount')
-    for i in range(0, numdevices):
-        name = audio.get_device_info_by_host_api_device_index(0, i).get('name')
-        if "USB audio CODEC" in name:
-            return i
-    return -1
-
-def getTimeValues(rate, chunk, numPoints):
-    numSamples = numPoints * chunk
-    totalTime = numSamples/rate
-    t = np.linspace(0, totalTime, numPoints)
-    return t
 
 calibrateWave = wave.open("calibration.wav", 'rb')
 calibratePowerData = []
@@ -126,6 +102,10 @@ def calibrate(plot=False):
     print("Finished listening to calibration signal...")
     
     m, b = np.polyfit(calibratePowerData, micPowerData[0:len(calibratePowerData)], 1)
+    
+    # save M and B to calibration_parameters.json
+    with open('calibration_parameters.json', 'w') as outfile:
+        json.dump({'M': m, 'B': b}, outfile, sort_keys=True, indent=4)
     
     if plot:
         lowerBound = min(calibratePowerData)
