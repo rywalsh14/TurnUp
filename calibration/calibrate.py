@@ -18,6 +18,8 @@ RATE = 44100
 CHUNK = 512
 RECORD_SECONDS = 10
 
+CALIBRATION_WAVE_PATH = "/home/pi/Developer/TurnUp/calibration/calibration.wav"
+
 # use this to query and display available audio devices
 def showDevices(audio):
     info = audio.get_host_api_info_by_index(0)
@@ -51,7 +53,7 @@ def playWavFile(fileName, chunk):
     p.terminate()
     return
 
-calibrateWave = wave.open("calibration.wav", 'rb')
+calibrateWave = wave.open(CALIBRATION_WAVE_PATH, 'rb')
 calibratePowerData = []
 micPowerData = []
 
