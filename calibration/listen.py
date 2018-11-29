@@ -5,6 +5,7 @@ import wave
 from matplotlib import pyplot as plt
 from scipy import signal
 from scipy.io import wavfile
+from termcolor import colored
 import audioop
 import numpy as np
 import time
@@ -55,6 +56,16 @@ def playWavFile(fileName, chunk):
     p.terminate()
     return
 
+# Calibrate wrapper with print statements for user
+def runCalibration():
+    # Run through calibration process
+    input("Press \'Enter\' to begin calibration")
+    m, b = calibrate()
+    print("Completed calibration stage and received the following parameters:")
+    print("\tM = " + str(m))
+    print("\tB = " + str(b))
+    return m, b
+
 # Converts user yes/no response to boolean value
 def readYesOrNo(input):
     responses = {
@@ -82,22 +93,22 @@ if recalibrate == None:
         recalibrate = readYesOrNo(input("Would you like to recalibrate? (Y/N): "))
 
 if recalibrate:
-    # Run through calibration process
-    input("Press \'Enter\' to begin calibration")
-    M, B = calibrate()
-    print("Completed calibration stage and received the following parameters:")
-    print("\tM = " + str(M))
-    print("\tB = " + str(B))
+    M, B = runCalibration()
 else:
     print('Okay! Loading last saved parameters from \'calibration_parameters.json\'...')
     # Load calibration parameters from calibration_parameters.json
-    with open('calibration_parameters.json') as parameterFile:
-        parameters = json.load(parameterFile)
-    M = parameters['M']
-    B = parameters['B']
-    print("Loaded the following parameters:")
-    print("\tM = " + str(M))
-    print("\tB = " + str(B))
+    try:
+        with open('calibration_parameters.json') as parameterFile:
+            parameters = json.load(parameterFile)
+        M = parameters['M']
+        B = parameters['B']
+        print("Loaded the following parameters:")
+        print("\tM = " + str(M))
+        print("\tB = " + str(B))
+    except IOError as e:
+        # No previous calibration_parameters.json file found, so run the calibration stage
+        print(colored("Failed to find previously saved parameters. Calibration Necessary.", "red"))
+        M, B = runCalibration()
 
 input("Press \'Enter\' to begin listening")
 
