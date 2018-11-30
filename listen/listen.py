@@ -61,7 +61,7 @@ def playWavFile(fileName, chunk):
 def runCalibration():
     # Run through calibration process
     input("Press \'Enter\' to begin calibration")
-    m, b = calibrate()
+    m, b = calibrate(plot=True)
     print("Completed calibration stage and received the following parameters:")
     print("\tM = " + str(m))
     print("\tB = " + str(b))
@@ -103,12 +103,14 @@ else:
             parameters = json.load(parameterFile)
         M = parameters['M']
         B = parameters['B']
+        print(colored("Success!", "green"))
         print("Loaded the following parameters:")
         print("\tM = " + str(M))
         print("\tB = " + str(B))
     except IOError as e:
         # No previous calibration_parameters.json file found, so run the calibration stage
-        print(colored("Failed to find previously saved parameters. Calibration Necessary.", "red"))
+        print(colored("Failed to find previously saved parameters.", "red"))
+        print(colored("Calibration necessary", "red"))
         M, B = runCalibration()
 
 input("Press \'Enter\' to begin listening")
