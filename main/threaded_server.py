@@ -1,3 +1,8 @@
+import sys, os
+sys.path.append(os.path.abspath(".."))
+sys.path.append(os.path.abspath("../calibration"))
+from calibrate import calibrate
+from listen_tools import runCalibration
 import socket
 import threading
 import json
@@ -117,6 +122,7 @@ def TCPserver():
                 flowLock.acquire()
                 print("Received CALIBRATE message from user\n")
                 flowLock.release()
+                M,B = runCalibration()
             elif userMessage["type"] == "settings":
                 # extrapolate and store the user settings in the system
                 flowLock.acquire()
@@ -135,6 +141,5 @@ def TCPserver():
 if __name__ == "__main__":
     
     UDPthread = threading.Thread(target=UDPserver, args=())
-
     UDPthread.start()
 
