@@ -2,7 +2,7 @@ import sys, os
 sys.path.append(os.path.abspath(".."))
 sys.path.append(os.path.abspath("../calibration"))
 from calibrate import calibrate
-from listen_tools import runCalibration
+from listen_tools import runCalibration, listen
 import socket
 import threading
 import json
@@ -89,6 +89,9 @@ def UDPserver():
 
 
 def TCPserver():
+    M = 0
+    B = 0
+    didCalibrate = False
     # Set up the main device server to receive user settings data from a user phone
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s.bind(("", SETTINGS_SERVER_PORT))  # open up a socket that anyone may connect to
@@ -121,8 +124,9 @@ def TCPserver():
                 # run calibration stage
                 flowLock.acquire()
                 print("Received CALIBRATE message from user\n")
-                flowLock.release()
                 M,B = runCalibration()
+                didCalibrate = True
+                flowLock.release()
             elif userMessage["type"] == "settings":
                 # extrapolate and store the user settings in the system
                 flowLock.acquire()
@@ -130,6 +134,11 @@ def TCPserver():
                 print("Received the following settings:")
                 print("\tThreshold:\t%f" %(userMessage["threshold"]))
                 print("\tSensitivity:\t%d\n" %(userMessage["sensitivity"]))
+                print("NOW BEGINNING LISTENING PROCESS\n")
+                if didCalibrate:
+                    listen(M, B, 10)
+                else:
+                    print("DID NOT PROPERLY CALIBRATE")
                 flowLock.release()
             else:
                 flowLock.acquire()

@@ -19,10 +19,38 @@ FORMAT = pyaudio.paInt16
 CHANNELS = 1
 RATE = 44100
 CHUNK = 512
-LISTEN_SECONDS = 10
 
 THRESHOLD = 1.5
 MAX_SCALE = 16
+
+# GLOBALS TO HOLD SHARED DATA
+# buffers to hold x points of input/mic power, where x is the window size of the power we want to average over
+inputPowerBuffer = []
+micPowerBuffer = []
+
+inputPowerData = []
+micPowerData = []
+
+micPower = 0
+
+expectedMicPowerData = []
+
+# MIGHT NEED TO CHANGE INIT
+avgExpectedMicPower = 0
+avgMicPower = 0
+
+#FOR Visualization Purposes
+avgExpectedMicPowerData = []
+avgMicPowerData = []
+
+scale = 1
+scaleData = []
+ratioData = []
+
+M=0
+B=0
+
+
 
 # use this to query and display available audio devices
 def showDevices(audio):
@@ -122,64 +150,14 @@ def mic_callback(mic_data, frame_count, time_info, status):
     return(mic_data, pyaudio.paContinue)
 
 
-def listen():
-    print("Welcome to TurnUp!")
-    # Prompt user for if they would like to recalibrate
-    recalibrate = readYesOrNo(input("Would you like to recalibrate? (Y/N): "))
-    if recalibrate == None:
-        while recalibrate == None:
-            print("Must answer \'YES\' or \'NO\'!")
-            recalibrate = readYesOrNo(input("Would you like to recalibrate? (Y/N): "))
-
-    if recalibrate:
-        M, B = runCalibration()
-    else:
-        print('Okay! Loading last saved parameters from \'calibration_parameters.json\'...')
-        # Load calibration parameters from calibration_parameters.json
-        try:
-            with open('calibration_parameters.json') as parameterFile:
-                parameters = json.load(parameterFile)
-            M = parameters['M']
-            B = parameters['B']
-            print(colored("Success!", "green"))
-            print("Loaded the following parameters:")
-            print("\tM = " + str(M))
-            print("\tB = " + str(B))
-        except IOError as e:
-            # No previous calibration_parameters.json file found, so run the calibration stage
-            print(colored("Failed to find previously saved parameters.", "red"))
-            print(colored("Calibration necessary", "red"))
-            M, B = runCalibration()
-
-    input("Press \'Enter\' to begin listening")
-
-    # buffers to hold x points of input/mic power, where x is the window size of the power we want to average over
-    inputPowerBuffer = []
-    micPowerBuffer = []
-
-    inputPowerData = []
-    micPowerData = []
-
-    micPower = 0
-
-    expectedMicPowerData = []
-
-    # MIGHT NEED TO CHANGE INIT
-    avgExpectedMicPower = 0
-    avgMicPower = 0
-
-
-    #powerDiffAvg = 0
-    #powerDiffData = []
-
-    #FOR Visualization Purposes
-    avgExpectedMicPowerData = []
-    avgMicPowerData = []
-
-
-    scale = 1
-    scaleData = []
-    ratioData = []
+def listen(cal_slope, cal_intercept, listen_seconds=10):
+    
+    # set the M and B parameters of the calibration graph
+    global M,B
+    M = cal_slope
+    B = cal_intercept
+    
+    
 
 
     # Begin main thread of code
@@ -212,7 +190,7 @@ def listen():
 
     while inputStream.is_active():
         print("Beginning listening...")
-        time.sleep(LISTEN_SECONDS)
+        time.sleep(listen_seconds)
         inputStream.stop_stream()
 
     micStream.stop_stream()

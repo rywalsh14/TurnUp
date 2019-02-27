@@ -76,6 +76,8 @@ def mic_callback(mic_data, frame_count, time_info, status):
 def calibrate(plot=False):
     # Begin main thread of code
     audio = pyaudio.PyAudio()
+    print("DEFAULT DEVICE: ")
+    print(audio.get_default_output_device_info())
 
     # FOR MAC - built-in mic has device ID 0, USB Audio device has device ID 2
     # FOR PI - input audio has device ID 2, mic audio has device ID 3
