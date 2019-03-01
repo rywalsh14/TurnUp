@@ -10,6 +10,7 @@ import numpy as np
 import time
 import json
 from utils import getInputDeviceID, getMicDeviceID, getTimeValues
+import sounddevice as sd
 
 
 FORMAT = pyaudio.paInt16
@@ -20,10 +21,13 @@ RECORD_SECONDS = 10
 
 CALIBRATION_WAVE_PATH = "../calibration/calibration.wav"
 
+# load the calibration power data
 with open('calibration_power_512.json') as calibratePowerFile:
     calDictionary = json.load(calibratePowerFile)
-
 calibratePowerData = calDictionary['calibratePowerData']
+
+# read the wav file into a numpy array
+cal_fs, cal_array = wavfile.read("/home/pi/Developer/TurnUp/calibration/calibration.wav")
 
 # use this to query and display available audio devices
 def showDevices(audio):
@@ -82,6 +86,7 @@ def mic_callback(mic_data, frame_count, time_info, status):
 
 def calibrate(plot=True):
     # Begin main thread of code
+    os.system("amixer set PCM 74%")     # set the internal pi volume control to 35 (somehow 74% results in 35)
     audio = pyaudio.PyAudio()
 
     # FOR MAC - built-in mic has device ID 0, USB Audio device has device ID 2
@@ -89,11 +94,11 @@ def calibrate(plot=True):
     # Open input stream source
 
     
-    calibrateFile = wave.open(r"/home/pi/Developer/TurnUp/calibration/calibration.wav", "rb")
-    calibrateStream = audio.open(format = audio.get_format_from_width(calibrateFile.getsampwidth()),
-                                 channels = calibrateFile.getnchannels(),
-                                 rate = calibrateFile.getframerate(),
-                                 output = True)
+##    calibrateFile = wave.open(r"/home/pi/Developer/TurnUp/calibration/calibration.wav", "rb")
+##    calibrateStream = audio.open(format = audio.get_format_from_width(calibrateFile.getsampwidth()),
+##                                 channels = calibrateFile.getnchannels(),
+##                                 rate = calibrateFile.getframerate(),
+##                                 output = True)
     
     # Open mic stream souce
     micStream = audio.open(format=FORMAT, 
@@ -106,23 +111,28 @@ def calibrate(plot=True):
 
     micStream.start_stream()
 
-    #read data
-    data = calibrateFile.readframes(CHUNK)
+##    #read data
+##    data = calibrateFile.readframes(CHUNK)
+##    
+##    #play stream
+##    while data:
+##        calibrateStream.write(data)
+##        data = calibrateFile.readframes(CHUNK)
     
-    #play stream
-    while data:
-        calibrateStream.write(data)
-        data = calibrateFile.readframes(CHUNK)
+    sd.play(cal_array, cal_fs)
+    sd.wait()
 
     micStream.close()
-    calibrateStream.stop_stream()
-    calibrateStream.close()
     audio.terminate()
 
+    print(len(micPowerData))
+    print(len(calibratePowerData))
 
     print("Finished listening to calibration signal...")
     
-    m, b = np.polyfit(calibratePowerData, micPowerData[0:len(calibratePowerData)], 1)
+    # get linear relationship... get min length first so dimensions match in the linear fit
+    minLength = min(len(calibratePowerData, len(micPowerData)))
+    m, b = np.polyfit(calibratePowerData[0:minLength], micPowerData[0:minLength], 1)
     
     # save M and B to calibration_parameters.json
     with open('calibration_parameters.json', 'w') as outfile:
