@@ -37,7 +37,7 @@ def mic_callback(mic_data, frame_count, time_info, status):
     return(mic_data, pyaudio.paContinue)
 
 def calibrate(plot=True):
-    os.system("amixer set PCM 74%")     # set the internal pi volume control to 35 (somehow 74% results in 35)
+    os.system("amixer set PCM 85%")     # set the internal pi volume control to 35 (somehow 74% results in 35)
     audio = pyaudio.PyAudio()
 
     # FOR MAC - built-in mic has device ID 0, USB Audio device has device ID 2

@@ -137,10 +137,6 @@ def input_callback(in_data, frame_count, time_info, status):
     scaleData.append(scale)
     potValData.append(pot_value)
     
-    #powerDiff = micPower - expectedMicPower
-    #powerDiffData.append(powerDiff)
-    
-    multData = audioop.mul(in_data, 2, scale)
     return(in_data, pyaudio.paContinue)
 
 

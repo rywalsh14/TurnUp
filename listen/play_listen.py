@@ -19,19 +19,26 @@ from utils import getInputDeviceID, getMicDeviceID, getTimeValues
 FORMAT = pyaudio.paInt16
 CHANNELS = 1
 RATE = 44100
-CHUNK = 512
 LISTEN_SECONDS = 30
 
-THRESHOLD = 1.5
-MAX_SCALE = 16
+THRESHOLD = 2
+sensitivity = 5
+
+
+
+sensitivityMap = {
+    1: 4096,
+    2: 2048,
+    3: 1024,
+    4: 512,
+    5: 256
+}
 
 
 
 
 
-
-
-
+CHUNK = sensitivityMap[sensitivity]
 
 
 
@@ -152,11 +159,7 @@ def input_callback(in_data, frame_count, time_info, status):
     outputPowerData.append(outputPower) 
     
     
-    in_data = audioop.mul(in_data, 2, scale)
-    
-    #inputPower = audioop.rms(in_data, 2)
-    #inputPowerData.append(inputPower)
-    #expectedMicPower = M*inputPower + B
+    #in_data = audioop.mul(in_data, 2, scale)
     
     
     expectedMicPower = M*outputPower+B
@@ -174,17 +177,12 @@ def input_callback(in_data, frame_count, time_info, status):
     if ratio > THRESHOLD:
         pot_value = max(pot_value-1, MIN_POT_VALUE)
         write_pot_value(pot_value)
-        #scale = min(scale+0.5, MAX_SCALE)
     elif pot_value < BASE_POT_VALUE:
         pot_value += 1
         write_pot_value(pot_value)
-        #scale -= 0.5
     scaleData.append(scale)
+    potValData.append(pot_value)
     
-    #powerDiff = micPower - expectedMicPower
-    #powerDiffData.append(powerDiff)
-    
-    multData = audioop.mul(in_data, 2, scale)
     return(in_data, pyaudio.paContinue)
 
 def mic_callback(mic_data, frame_count, time_info, status):
@@ -217,8 +215,9 @@ spi.open(0, 1)
 spi.max_speed_hz = 7629
 
 print("Welcome to TurnUp!")
+print("Would you like to recalibrate? (Y/N): ")
 # Prompt user for if they would like to recalibrate
-recalibrate = readYesOrNo(input("Would you like to recalibrate? (Y/N): "))
+recalibrate = readYesOrNo(input(""))
 if recalibrate == None:
     while recalibrate == None:
         print("Must answer \'YES\' or \'NO\'!")
@@ -262,9 +261,6 @@ avgExpectedMicPower = 0
 avgMicPower = 0
 
 
-#powerDiffAvg = 0
-#powerDiffData = []
-
 #FOR Visualization Purposes
 avgExpectedMicPowerData = []
 avgMicPowerData = []
@@ -272,6 +268,7 @@ avgMicPowerData = []
 
 scale = 1
 scaleData = []
+potValData = []
 ratioData = []
 
 
@@ -348,11 +345,13 @@ plt.legend(handles=[avgMicPowerPlot, avgExpMicPowerPlot])
 # Plot of scale factor & ratio over time on same plot
 scaleTimeVals = getTimeValues(RATE, CHUNK, len(scaleData))
 ratioTimeVals = getTimeValues(RATE, CHUNK, len(ratioData))
+potTimeVals = getTimeValues(RATE, CHUNK, len(potValData))
+
 scaleRatioFig = plt.figure(figsize=(30,10))
 scaleRatioFig.suptitle('Scale Factor and Avg. Expected Mic Power to Avg Mic Power Ratio over Time', fontsize=14, fontweight='bold')
 
 # First plot ratio
-plt.subplot(211)
+plt.subplot(311)
 plt.plot(ratioTimeVals, ratioData, color="tab:red")
 plt.ylabel('Ratio Magnitude')
 
@@ -363,15 +362,16 @@ for i in range (0, len(ratioTimeVals)):
 plt.plot(ratioTimeVals, threshLine, color="gray", linestyle='dashed')
 
 # Now plot the scale on a separate Subplot
-plt.subplot(212)
+plt.subplot(312)
 plt.plot(scaleTimeVals, scaleData, color="tab:blue")
 plt.xlabel('Time (s)')
 plt.ylabel('Scale Magnitude')
 
+plt.subplot(313)
+plt.plot(potTimeVals, potValData, color="tab:green")
+plt.xlabel('Time (s)')
+plt.ylabel('Potentiometer Value Magnitude')
+
 plt.show()
 
 
-
-print("Exp. Mic pow length: %s" %(len(expectedMicPowerData)))
-print("Input pow length: %s" %(len(inputPowerData)))
-print("Mic pow length: %s" %(len(micPowerData)))
