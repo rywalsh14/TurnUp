@@ -131,7 +131,7 @@ def calibrate(plot=True):
     print("Finished listening to calibration signal...")
     
     # get linear relationship... get min length first so dimensions match in the linear fit
-    minLength = min(len(calibratePowerData, len(micPowerData)))
+    minLength = min(len(calibratePowerData), len(micPowerData))
     m, b = np.polyfit(calibratePowerData[0:minLength], micPowerData[0:minLength], 1)
     
     # save M and B to calibration_parameters.json
