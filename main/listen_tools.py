@@ -11,6 +11,7 @@ import audioop
 import numpy as np
 import time
 import json
+import spidev
 from calibrate import calibrate
 from utils import getInputDeviceID, getMicDeviceID, getTimeValues
 
@@ -21,36 +22,6 @@ RATE = 44100
 CHUNK = 512
 
 THRESHOLD = 1.5
-MAX_SCALE = 16
-
-# GLOBALS TO HOLD SHARED DATA
-# buffers to hold x points of input/mic power, where x is the window size of the power we want to average over
-inputPowerBuffer = []
-micPowerBuffer = []
-
-inputPowerData = []
-micPowerData = []
-
-micPower = 0
-
-expectedMicPowerData = []
-
-# MIGHT NEED TO CHANGE INIT
-avgExpectedMicPower = 0
-avgMicPower = 0
-
-#FOR Visualization Purposes
-avgExpectedMicPowerData = []
-avgMicPowerData = []
-
-scale = 1
-scaleData = []
-ratioData = []
-
-M=0
-B=0
-
-
 
 # use this to query and display available audio devices
 def showDevices(audio):
@@ -112,15 +83,37 @@ def readYesOrNo(input):
         return responses[input]
     return None
 
+# Split integer pot value into a two byte array to send via SPI
+def write_pot_value(pot_value):
+    spi_data = pot_value + 4352    # 4352 = 0x1100, which are the spi command bits we need to append to the pot value
+    msb = (spi_data >> 8)
+    lsb = spi_data & 0xFF
+    spi.xfer([msb, lsb])
+
+# given a value that is assigned to the digital potentiometer (resulting in amplification):
+# calculate a corresponding scale value, which will be factored into the EXPECTED mic power calculation.
+# Essentially: this helps us in calculating expected mic power when the output is being amplified analogly.
+# This is necessary b/c with analog amplification, we don't have any info besides the pot value to base expected mic power off of
+# This exploits the fact that pot value relates linearly to amplification
+def convertPotValueToScale(new_pot_value):
+    global BASE_POT_VALUE, BASE_STRENGTH_PERCENTAGE
+    new_strength_percentage = (255 - new_pot_value)/255
+    return new_strength_percentage/BASE_STRENGTH_PERCENTAGE
+    
+
+# input callback function to deal with audio in
+# handles the input power calculation & the expected mic power calculation
 def input_callback(in_data, frame_count, time_info, status):
-    global avgExpectedMicPower, avgMicPower, scale
+    global avgExpectedMicPower, avgMicPower, pot_value, outputPowerData
     
-    in_data = audioop.mul(in_data, 2, scale)
     
-    inputPower = audioop.rms(in_data, 2)
-    inputPowerData.append(inputPower)
+    scale = convertPotValueToScale(pot_value)        # calculate expected scale from pot value
+    out_data = audioop.mul(in_data, 2, scale)        # calculate expected out data by multiplying the input data by the scale factor
     
-    expectedMicPower = M*inputPower + B
+    outputPower = audioop.rms(out_data, 2)            # calculate the output power
+    outputPowerData.append(outputPower)   
+    
+    expectedMicPower = M*outputPower + B             # calculate expected mic power from out power
     expectedMicPowerData.append(expectedMicPower)
     
     avgExpectedMicPower = 0.01*expectedMicPower + 0.99*avgExpectedMicPower
@@ -132,10 +125,17 @@ def input_callback(in_data, frame_count, time_info, status):
     ratioData.append(ratio)
     
     if ratio > THRESHOLD:
-        scale = min(scale+0.5, MAX_SCALE)
-    elif scale > 1:
-        scale -= 0.5
+        # Decrement pot value --> increase amplification
+        # Make sure pot value doesn't go under minimum
+        pot_value = max(pot_value-1, MIN_POT_VALUE)
+        write_pot_value(pot_value)
+    elif pot_value < BASE_POT_VALUE:
+        # If pot value lower than base (i.e. output is LOUDER than regular "no ambient noise" state,
+        # Increment pot value and write it
+        pot_value += 1
+        write_pot_value(pot_value)
     scaleData.append(scale)
+    potValData.append(pot_value)
     
     #powerDiff = micPower - expectedMicPower
     #powerDiffData.append(powerDiff)
@@ -143,15 +143,65 @@ def input_callback(in_data, frame_count, time_info, status):
     multData = audioop.mul(in_data, 2, scale)
     return(in_data, pyaudio.paContinue)
 
+
 def mic_callback(mic_data, frame_count, time_info, status):
     global micPower
+    
     micPower = audioop.rms(mic_data, 2)
     micPowerData.append(micPower)
     return(mic_data, pyaudio.paContinue)
 
+# potentiometer base value & strength percentage
+BASE_POT_VALUE = 230
+BASE_STRENGTH_PERCENTAGE = (255 - BASE_POT_VALUE)/255
+
+# MIN pot value corresponds to MAX amplification
+# Essentially this is an amplification ceiling
+MIN_POT_VALUE = 0
+
+# GLOBALS TO HOLD SHARED DATA
+# buffers to hold x points of input/mic power, where x is the window size of the power we want to average over
+##inputPowerBuffer = []
+##micPowerBuffer = []
+
+outputPowerData = []
+micPowerData = []
+
+micPower = 0
+
+expectedMicPowerData = []
+
+# MIGHT NEED TO CHANGE INIT
+avgExpectedMicPower = 0
+avgMicPower = 0
+
+#FOR Visualization Purposes
+avgExpectedMicPowerData = []
+avgMicPowerData = []
+
+# initialize potentiometer value as the base pot value
+pot_value = BASE_POT_VALUE
+
+
+scaleData = []
+potValData = []
+ratioData = []
+
+M=0
+B=0
+
+# instantiate the spi
+spi = spidev.SpiDev()
+spi.open(0, 1)
+write_pot_value(BASE_POT_VALUE)
+spi.max_speed_hz = 7629
+
+
+
+
 
 def listen(cal_slope, cal_intercept, listen_seconds=10):
-    
+    global ic_count, mc_count
     # set the M and B parameters of the calibration graph
     global M,B
     M = cal_slope
@@ -171,7 +221,6 @@ def listen(cal_slope, cal_intercept, listen_seconds=10):
                         channels=CHANNELS,
                         rate=RATE, 
                         input=True,
-                        output=True,
                         frames_per_buffer=CHUNK,
                         stream_callback=input_callback)
 
@@ -202,7 +251,7 @@ def listen(cal_slope, cal_intercept, listen_seconds=10):
 
     # Power data plot
     micPowerTimeVals = getTimeValues(RATE, CHUNK, len(micPowerData))
-    expectedMicPowerTimeVals = getTimeValues(RATE, CHUNK, len(expectedMicPowerData))
+    expectedMicPowerTimeVals = getTimeValues(RATE/CHUNK, 1, len(expectedMicPowerData))
     micPowerFig = plt.figure(figsize=(30,10))
     micPowerFig.suptitle('Mic Power & Expected Mic Power over Time', fontsize=14, fontweight='bold')
     micPowerPlot, = plt.plot(micPowerTimeVals, 
@@ -233,11 +282,13 @@ def listen(cal_slope, cal_intercept, listen_seconds=10):
     # Plot of scale factor & ratio over time on same plot
     scaleTimeVals = getTimeValues(RATE, CHUNK, len(scaleData))
     ratioTimeVals = getTimeValues(RATE, CHUNK, len(ratioData))
+    potTimeVals = getTimeValues(RATE, CHUNK, len(potValData))
+    
     scaleRatioFig = plt.figure(figsize=(30,10))
     scaleRatioFig.suptitle('Scale Factor and Avg. Expected Mic Power to Avg Mic Power Ratio over Time', fontsize=14, fontweight='bold')
 
     # First plot ratio
-    plt.subplot(211)
+    plt.subplot(311)
     plt.plot(ratioTimeVals, ratioData, color="tab:red")
     plt.ylabel('Ratio Magnitude')
 
@@ -248,9 +299,21 @@ def listen(cal_slope, cal_intercept, listen_seconds=10):
     plt.plot(ratioTimeVals, threshLine, color="gray", linestyle='dashed')
 
     # Now plot the scale on a separate Subplot
-    plt.subplot(212)
+    plt.subplot(312)
     plt.plot(scaleTimeVals, scaleData, color="tab:blue")
     plt.xlabel('Time (s)')
     plt.ylabel('Scale Magnitude')
+    
+    plt.subplot(313)
+    plt.plot(potTimeVals, potValData, color="tab:green")
+    plt.xlabel('Time (s)')
+    plt.ylabel('Potentiometer Value Magnitude')
 
     plt.show()
+    
+    print("Mic power: %s" % (len(micPowerData)))
+    print("Exp mic power: %s" % (len(expectedMicPowerData)))
+    
+    print("In callback count: %s" %(ic_count))
+    print("Mic callback count: %s" %(mc_count))
+    

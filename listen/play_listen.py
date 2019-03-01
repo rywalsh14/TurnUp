@@ -11,6 +11,7 @@ import audioop
 import numpy as np
 import time
 import json
+import spidev
 from calibrate import calibrate
 from utils import getInputDeviceID, getMicDeviceID, getTimeValues
 
@@ -19,10 +20,61 @@ FORMAT = pyaudio.paInt16
 CHANNELS = 1
 RATE = 44100
 CHUNK = 512
-LISTEN_SECONDS = 100
+LISTEN_SECONDS = 30
 
 THRESHOLD = 1.5
 MAX_SCALE = 16
+
+
+
+
+
+
+
+
+
+
+
+# potentiometer base value & strength percentage
+BASE_POT_VALUE = 240
+BASE_STRENGTH_PERCENTAGE = (255 - BASE_POT_VALUE)/255
+
+# MIN pot value corresponds to MAX amplification
+# Essentially this is an amplification ceiling
+MIN_POT_VALUE = 0
+pot_value = BASE_POT_VALUE
+
+# instantiate the spi
+spi = spidev.SpiDev()
+spi.open(0, 1)
+spi.max_speed_hz = 7629
+
+# Split integer pot value into a two byte array to send via SPI
+def write_pot_value(pot_value):
+    spi_data = pot_value + 4352    # 4352 = 0x1100, which are the spi command bits we need to append to the pot value
+    msb = (spi_data >> 8)
+    lsb = spi_data & 0xFF
+    spi.xfer([msb, lsb])
+
+
+# given a value that is assigned to the digital potentiometer (resulting in amplification):
+# calculate a corresponding scale value, which will be factored into the EXPECTED mic power calculation.
+# Essentially: this helps us in calculating expected mic power when the output is being amplified analogly.
+# This is necessary b/c with analog amplification, we don't have any info besides the pot value to base expected mic power off of
+# This exploits the fact that pot value relates linearly to amplification
+def convertPotValueToScale(new_pot_value):
+    global BASE_POT_VALUE, BASE_STRENGTH_PERCENTAGE
+    new_strength_percentage = (255 - new_pot_value)/255
+    return new_strength_percentage/BASE_STRENGTH_PERCENTAGE
+
+
+write_pot_value(BASE_POT_VALUE)
+
+
+
+
+
+
 
 # use this to query and display available audio devices
 def showDevices(audio):
@@ -85,6 +137,85 @@ def readYesOrNo(input):
         return responses[input]
     return None
 
+outputPowerData = []
+
+def input_callback(in_data, frame_count, time_info, status):
+    global avgExpectedMicPower, avgMicPower, scale, pot_value
+    
+    
+    
+    
+    
+    scale = convertPotValueToScale(pot_value)        # calculate expected scale from pot value
+    out_data = audioop.mul(in_data, 2, scale)        # calculate expected out data by multiplying the input data by the scale factor
+    outputPower = audioop.rms(out_data, 2)            # calculate the output power
+    outputPowerData.append(outputPower) 
+    
+    
+    in_data = audioop.mul(in_data, 2, scale)
+    
+    #inputPower = audioop.rms(in_data, 2)
+    #inputPowerData.append(inputPower)
+    #expectedMicPower = M*inputPower + B
+    
+    
+    expectedMicPower = M*outputPower+B
+    expectedMicPowerData.append(expectedMicPower)
+    
+    
+    avgExpectedMicPower = 0.01*expectedMicPower + 0.99*avgExpectedMicPower
+    avgMicPower = 0.01*micPower + 0.99*avgMicPower
+    avgExpectedMicPowerData.append(avgExpectedMicPower)
+    avgMicPowerData.append(avgMicPower)
+    
+    ratio = avgMicPower/avgExpectedMicPower
+    ratioData.append(ratio)
+    
+    if ratio > THRESHOLD:
+        pot_value = max(pot_value-1, MIN_POT_VALUE)
+        write_pot_value(pot_value)
+        #scale = min(scale+0.5, MAX_SCALE)
+    elif pot_value < BASE_POT_VALUE:
+        pot_value += 1
+        write_pot_value(pot_value)
+        #scale -= 0.5
+    scaleData.append(scale)
+    
+    #powerDiff = micPower - expectedMicPower
+    #powerDiffData.append(powerDiff)
+    
+    multData = audioop.mul(in_data, 2, scale)
+    return(in_data, pyaudio.paContinue)
+
+def mic_callback(mic_data, frame_count, time_info, status):
+    global micPower
+    micPower = audioop.rms(mic_data, 2)
+    micPowerData.append(micPower)
+    return(mic_data, pyaudio.paContinue)
+
+
+
+
+    
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+spi = spidev.SpiDev()
+spi.open(0, 1)
+spi.max_speed_hz = 7629
+
 print("Welcome to TurnUp!")
 # Prompt user for if they would like to recalibrate
 recalibrate = readYesOrNo(input("Would you like to recalibrate? (Y/N): "))
@@ -143,45 +274,6 @@ scale = 1
 scaleData = []
 ratioData = []
 
-ic_count = 0
-def input_callback(in_data, frame_count, time_info, status):
-    global avgExpectedMicPower, avgMicPower, scale, ic_count
-    ic_count+=1
-    in_data = audioop.mul(in_data, 2, scale)
-    
-    inputPower = audioop.rms(in_data, 2)
-    inputPowerData.append(inputPower)
-    
-    expectedMicPower = M*inputPower + B
-    expectedMicPowerData.append(expectedMicPower)
-    
-    avgExpectedMicPower = 0.01*expectedMicPower + 0.99*avgExpectedMicPower
-    avgMicPower = 0.01*micPower + 0.99*avgMicPower
-    avgExpectedMicPowerData.append(avgExpectedMicPower)
-    avgMicPowerData.append(avgMicPower)
-    
-    ratio = avgMicPower/avgExpectedMicPower
-    ratioData.append(ratio)
-    
-    if ratio > THRESHOLD:
-        scale = min(scale+0.5, MAX_SCALE)
-    elif scale > 1:
-        scale -= 0.5
-    scaleData.append(scale)
-    
-    #powerDiff = micPower - expectedMicPower
-    #powerDiffData.append(powerDiff)
-    
-    multData = audioop.mul(in_data, 2, scale)
-    return(in_data, pyaudio.paContinue)
-
-mc_count = 0
-def mic_callback(mic_data, frame_count, time_info, status):
-    global micPower, mc_count
-    mc_count+=1
-    micPower = audioop.rms(mic_data, 2)
-    micPowerData.append(micPower)
-    return(mic_data, pyaudio.paContinue)
 
 # Begin main thread of code
 audio = pyaudio.PyAudio()
@@ -194,7 +286,7 @@ inputStream = audio.open(format=FORMAT,
                     channels=CHANNELS,
                     rate=RATE, 
                     input=True,
-                    output=True,
+                    output=False,
                     frames_per_buffer=CHUNK,
                     stream_callback=input_callback)
 
@@ -278,5 +370,8 @@ plt.ylabel('Scale Magnitude')
 
 plt.show()
 
-print("IC: %s" %(ic_count))
-print("MC: %s" %(mc_count))
+
+
+print("Exp. Mic pow length: %s" %(len(expectedMicPowerData)))
+print("Input pow length: %s" %(len(inputPowerData)))
+print("Mic pow length: %s" %(len(micPowerData)))

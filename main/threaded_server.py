@@ -7,6 +7,8 @@ import socket
 import threading
 import json
 
+LISTEN_SECONDS = 10
+
 flowLock = threading.Lock()
 
 DEVICE_NAME = "TurnUp 1"
@@ -28,6 +30,7 @@ CLIENT_CONNECT_PORT = None  # Client port to send device data back to
             * now the phone may connect and send user specified settings
 """
 
+bypass_calibration = False
 
 def UDPserver():
     while True:
@@ -124,7 +127,19 @@ def TCPserver():
                 # run calibration stage
                 flowLock.acquire()
                 print("Received CALIBRATE message from user\n")
-                M,B = runCalibration()
+                if bypass_calibration:
+                    try:
+                        with open('good_calibration_parameters.json') as parameterFile:
+                            parameters = json.load(parameterFile)
+                        M = parameters['M']
+                        B = parameters['B']
+                        print("Loaded the following parameters:")
+                        print("\tM = " + str(M))
+                        print("\tB = " + str(B))
+                    except IOError as e:
+                        print("Can't load parameters")
+                else:
+                    M,B = runCalibration()
                 didCalibrate = True
                 flowLock.release()
             elif userMessage["type"] == "settings":
@@ -136,7 +151,7 @@ def TCPserver():
                 print("\tSensitivity:\t%d\n" %(userMessage["sensitivity"]))
                 print("NOW BEGINNING LISTENING PROCESS\n")
                 if didCalibrate:
-                    listen(M, B, 10)
+                    listen(M, B, LISTEN_SECONDS)
                 else:
                     print("DID NOT PROPERLY CALIBRATE")
                 flowLock.release()
