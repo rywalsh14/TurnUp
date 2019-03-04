@@ -21,67 +21,45 @@ CHANNELS = 1
 RATE = 44100
 CHUNK = 512
 
+# initialize threshold/sensitivity/M/B now, will be changed upon receiving user settings
 THRESHOLD = 1.5
+SENSITIVITY = 3
+M=0
+B=0
 
-# use this to query and display available audio devices
-def showDevices(audio):
-    info = audio.get_host_api_info_by_index(0)
-    numdevices = info.get('deviceCount')
-    for i in range(0, numdevices):
-        print("Device id ", i, " - ", audio.get_device_info_by_host_api_device_index(0, i).get('name'))
+sensitivityMap = {
+    1: 4096,
+    2: 2048,
+    3: 1024,
+    4: 512,
+    5: 256
+}
 
+# potentiometer base value & strength percentage
+BASE_POT_VALUE = 240
+BASE_STRENGTH_PERCENTAGE = (255 - BASE_POT_VALUE)/255
 
-def playWavFile(fileName, chunk):
-    f = wave.open(r"/home/pi/Developer/TurnUp/calibration/" + fileName,"rb")  
-    #instantiate PyAudio  
-    p = pyaudio.PyAudio()  
-    #open stream  
-    stream = p.open(format = p.get_format_from_width(f.getsampwidth()),  
-                    channels = f.getnchannels(),  
-                    rate = f.getframerate(),  
-                    output = True)  
-    #read data  
-    data = f.readframes(chunk)  
+# MIN pot value corresponds to MAX amplification
+# Essentially this is an amplification ceiling
+MIN_POT_VALUE = 0
 
-    #play stream
-    while data:  
-        stream.write(data)  
-        data = f.readframes(chunk)  
+# initialize potentiometer value as the base pot value
+pot_value = BASE_POT_VALUE
 
-    #stop stream  
-    stream.stop_stream()  
-    stream.close()  
+# globals to work with power data
+avgExpectedMicPower = 0
+avgMicPower = 0
+micPower = 0
 
-    #close PyAudio  
-    p.terminate()
-    return
-
-# Calibrate wrapper with print statements for user
-def runCalibration():
-    # Run through calibration process
-    m, b = calibrate(plot=True)
-    print("Completed calibration stage and received the following parameters:")
-    print("\tM = " + str(m))
-    print("\tB = " + str(b))
-    return m, b
-
-# Converts user yes/no response to boolean value
-def readYesOrNo(input):
-    responses = {
-        "YES": True,
-        "Yes": True,
-        "yes": True,
-        "Y": True,
-        "y": True,
-        "NO": False,
-        "No": False,
-        "no": False,
-        "N": False,
-        "n": False
-    }
-    if input in responses:
-        return responses[input]
-    return None
+# arrays to hold data over time for graphs
+outputPowerData = []
+micPowerData = []
+expectedMicPowerData = []
+avgExpectedMicPowerData = []
+avgMicPowerData = []
+scaleData = []
+potValData = []
+ratioData = []
 
 # Split integer pot value into a two byte array to send via SPI
 def write_pot_value(pot_value):
@@ -89,6 +67,21 @@ def write_pot_value(pot_value):
     msb = (spi_data >> 8)
     lsb = spi_data & 0xFF
     spi.xfer([msb, lsb])
+
+# instantiate the spi
+spi = spidev.SpiDev()
+spi.open(0, 1)
+write_pot_value(BASE_POT_VALUE)
+spi.max_speed_hz = 7629
+
+# Calibrate wrapper with print statements for user
+def runCalibration():
+    # Run through calibration process
+    m, b = calibrate(False)
+    print("Completed calibration stage and received the following parameters:")
+    print("\tM = " + str(m))
+    print("\tB = " + str(b))
+    return m, b
 
 # given a value that is assigned to the digital potentiometer (resulting in amplification):
 # calculate a corresponding scale value, which will be factored into the EXPECTED mic power calculation.
@@ -109,7 +102,6 @@ def input_callback(in_data, frame_count, time_info, status):
     
     scale = convertPotValueToScale(pot_value)        # calculate expected scale from pot value
     out_data = audioop.mul(in_data, 2, scale)        # calculate expected out data by multiplying the input data by the scale factor
-    
     outputPower = audioop.rms(out_data, 2)            # calculate the output power
     outputPowerData.append(outputPower)   
     
@@ -147,65 +139,20 @@ def mic_callback(mic_data, frame_count, time_info, status):
     micPowerData.append(micPower)
     return(mic_data, pyaudio.paContinue)
 
-# potentiometer base value & strength percentage
-BASE_POT_VALUE = 230
-BASE_STRENGTH_PERCENTAGE = (255 - BASE_POT_VALUE)/255
 
-# MIN pot value corresponds to MAX amplification
-# Essentially this is an amplification ceiling
-MIN_POT_VALUE = 0
-
-# GLOBALS TO HOLD SHARED DATA
-# buffers to hold x points of input/mic power, where x is the window size of the power we want to average over
-##inputPowerBuffer = []
-##micPowerBuffer = []
-
-outputPowerData = []
-micPowerData = []
-
-micPower = 0
-
-expectedMicPowerData = []
-
-# MIGHT NEED TO CHANGE INIT
-avgExpectedMicPower = 0
-avgMicPower = 0
-
-#FOR Visualization Purposes
-avgExpectedMicPowerData = []
-avgMicPowerData = []
-
-# initialize potentiometer value as the base pot value
-pot_value = BASE_POT_VALUE
-
-
-scaleData = []
-potValData = []
-ratioData = []
-
-M=0
-B=0
-
-# instantiate the spi
-spi = spidev.SpiDev()
-spi.open(0, 1)
-write_pot_value(BASE_POT_VALUE)
-spi.max_speed_hz = 7629
-
-
-
-
-
-def listen(cal_slope, cal_intercept, listen_seconds=10):
-    global ic_count, mc_count
+def listen(cal_slope, cal_intercept, threshold, sensitivity, listen_seconds=20):
     # set the M and B parameters of the calibration graph
     global M,B
     M = cal_slope
     B = cal_intercept
     
+    THRESHOLD = threshold
+    SENSITIVITY = sensitivity
+    CHUNK = sensitivityMap[SENSITIVITY]
     
-
-
+    print("Set the system's sensitivity to %s\n" % (SENSITIVITY))
+    
+    
     # Begin main thread of code
     audio = pyaudio.PyAudio()
 
@@ -306,10 +253,4 @@ def listen(cal_slope, cal_intercept, listen_seconds=10):
     plt.ylabel('Potentiometer Value Magnitude')
 
     plt.show()
-    
-    print("Mic power: %s" % (len(micPowerData)))
-    print("Exp mic power: %s" % (len(expectedMicPowerData)))
-    
-    print("In callback count: %s" %(ic_count))
-    print("Mic callback count: %s" %(mc_count))
     

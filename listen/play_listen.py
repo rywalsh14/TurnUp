@@ -21,7 +21,7 @@ CHANNELS = 1
 RATE = 44100
 LISTEN_SECONDS = 30
 
-THRESHOLD = 2
+THRESHOLD = 1.5
 sensitivity = 5
 
 
@@ -148,18 +148,12 @@ outputPowerData = []
 
 def input_callback(in_data, frame_count, time_info, status):
     global avgExpectedMicPower, avgMicPower, scale, pot_value
-    
-    
-    
-    
+
     
     scale = convertPotValueToScale(pot_value)        # calculate expected scale from pot value
     out_data = audioop.mul(in_data, 2, scale)        # calculate expected out data by multiplying the input data by the scale factor
     outputPower = audioop.rms(out_data, 2)            # calculate the output power
     outputPowerData.append(outputPower) 
-    
-    
-    #in_data = audioop.mul(in_data, 2, scale)
     
     
     expectedMicPower = M*outputPower+B
@@ -190,20 +184,6 @@ def mic_callback(mic_data, frame_count, time_info, status):
     micPower = audioop.rms(mic_data, 2)
     micPowerData.append(micPower)
     return(mic_data, pyaudio.paContinue)
-
-
-
-
-    
-
-
-
-
-
-
-
-
-
 
 
 

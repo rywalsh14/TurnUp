@@ -7,7 +7,7 @@ import socket
 import threading
 import json
 
-LISTEN_SECONDS = 10
+LISTEN_SECONDS = 20
 
 flowLock = threading.Lock()
 
@@ -151,7 +151,7 @@ def TCPserver():
                 print("\tSensitivity:\t%d\n" %(userMessage["sensitivity"]))
                 print("NOW BEGINNING LISTENING PROCESS\n")
                 if didCalibrate:
-                    listen(M, B, LISTEN_SECONDS)
+                    listen(M, B, userMessage["threshold"], userMessage["sensitivity"], LISTEN_SECONDS)
                 else:
                     print("DID NOT PROPERLY CALIBRATE")
                 flowLock.release()

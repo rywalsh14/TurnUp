@@ -36,7 +36,7 @@ def mic_callback(mic_data, frame_count, time_info, status):
     micIntensityData.append(micIntensity)
     return(mic_data, pyaudio.paContinue)
 
-def calibrate(plot=True):
+def calibrate(plot=False):
     os.system("amixer set PCM 85%")     # set the internal pi volume control to 35 (somehow 74% results in 35)
     audio = pyaudio.PyAudio()
 
@@ -66,6 +66,7 @@ def calibrate(plot=True):
     # get linear relationship... get min length first so dimensions match in the linear fit
     minLength = min(len(calibratePowerData), len(micIntensityData))
     m, b = np.polyfit(calibratePowerData[0:minLength], micIntensityData[0:minLength], 1)
+    m *= 1.1
     
     # save M and B to calibration_parameters.json
     with open('calibration_parameters.json', 'w') as outfile:
