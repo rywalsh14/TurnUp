@@ -24,20 +24,29 @@ CALIBRATION_WAVE_FILE = "/home/pi/Developer/TurnUp/calibration/calibration.wav"
 cal_fs, cal_array = wavfile.read(CALIBRATION_WAVE_FILE)
 
 # load the calibration power data
-with open('calibration_power_512.json') as calibratePowerFile:
-    calDictionary = json.load(calibratePowerFile)
-calibratePowerData = calDictionary['calibratePowerData']
+#with open('calibration_power_512.json') as calibratePowerFile:
+#    calDictionary = json.load(calibratePowerFile)
+#calibratePowerData = calDictionary['calibratePowerData']
 
 # initialize the mic intensity data array
 micIntensityData = []
+
+# initialize cal intensity array
+calibrateIntensityData = []
 
 def mic_callback(mic_data, frame_count, time_info, status):
     micIntensity = audioop.rms(mic_data, 2)    # take rms over this chunk of mic data
     micIntensityData.append(micIntensity)
     return(mic_data, pyaudio.paContinue)
 
+def input_callback(in_data, frame_count, time_info, status):
+    calibrateIntensity = audioop.rms(in_data, 2)    # take rms over this chunk of mic data
+    calibrateIntensityData.append(calibrateIntensity)
+    return(in_data, pyaudio.paContinue)
+    
+
 def calibrate(plot=False):
-    os.system("amixer set PCM 85%")     # set the internal pi volume control to 35 (somehow 74% results in 35)
+    os.system("amixer set PCM 68%")     # set the internal pi volume control to 35 (somehow 74% results in 35)
     audio = pyaudio.PyAudio()
 
     # FOR MAC - built-in mic has device ID 0, USB Audio device has device ID 2
@@ -52,8 +61,17 @@ def calibrate(plot=False):
                         input=True,
                         frames_per_buffer=CHUNK,
                         stream_callback=mic_callback)
-
+    
+    inputStream = audio.open(format=FORMAT, 
+                        input_device_index=getInputDeviceID(audio),
+                        channels=CHANNELS,
+                        rate=RATE, 
+                        input=True,
+                        frames_per_buffer=CHUNK,
+                        stream_callback=input_callback)
+    
     micStream.start_stream()
+    inputStream.start_stream()
     
     sd.play(cal_array, cal_fs)
     sd.wait()
@@ -63,18 +81,20 @@ def calibrate(plot=False):
 
     print("Finished listening to calibration signal...")
     
+    
     # get linear relationship... get min length first so dimensions match in the linear fit
-    minLength = min(len(calibratePowerData), len(micIntensityData))
-    m, b = np.polyfit(calibratePowerData[0:minLength], micIntensityData[0:minLength], 1)
-    m *= 1.1
+    minLength = int(min(0.9*len(calibrateIntensityData), 0.9*len(micIntensityData)))
+    
+    m, b = np.polyfit(calibrateIntensityData[0:minLength], micIntensityData[0:minLength], 1)
+    #m *= 1.1
     
     # save M and B to calibration_parameters.json
     with open('calibration_parameters.json', 'w') as outfile:
         json.dump({'M': m, 'B': b}, outfile, sort_keys=True, indent=4)
     
     if plot:
-        lowerBound = min(calibratePowerData)
-        upperBound = max(calibratePowerData)
+        lowerBound = min(calibrateIntensityData)
+        upperBound = max(calibrateIntensityData)
         print("Generating graphs...")
         x = np.linspace(lowerBound, upperBound)
         y = []
@@ -89,19 +109,19 @@ def calibrate(plot=False):
         plt.xlabel('Time (s)')
         plt.ylabel('Relative Fraction of Maximum Intensity')
 
-        calibrateTimeValues = getTimeValues(RATE, CHUNK, len(calibratePowerData))
+        calibrateTimeValues = getTimeValues(RATE, CHUNK, len(calibrateIntensityData))
         # Calibrate signal power over time plot
-        calibratePowerFig = plt.figure(figsize=(30,4))
-        calibratePowerFig.suptitle('Calibrate Signal Intensity over Time', fontsize=14, fontweight='bold')
-        plt.plot(calibrateTimeValues, calibratePowerData)
+        calibrateIntensityFig = plt.figure(figsize=(30,4))
+        calibrateIntensityFig.suptitle('Calibrate Signal Intensity over Time', fontsize=14, fontweight='bold')
+        plt.plot(calibrateTimeValues, calibrateIntensityData)
         plt.xlabel('Time (s)')
         plt.ylabel('Relative Fraction of Maximum Intensity')
 
         # Mic Pickup Power vs. Input Signal Power graph
         powerFig = plt.figure(figsize=(30,4))
         powerFig.suptitle('Mic Pickup Intensity vs. Input Signal Intensity', fontsize=14, fontweight='bold')
-        powerDataPoints, = plt.plot(calibratePowerData, 
-                                   micIntensityData[0:len(calibratePowerData)], 
+        powerDataPoints, = plt.plot(calibrateIntensityData, 
+                                   micIntensityData[0:len(calibrateIntensityData)], 
                                    'o',
                                    color="orange",
                                    label="Intensity Data Points")

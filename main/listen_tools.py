@@ -22,7 +22,7 @@ RATE = 44100
 CHUNK = 512
 
 # initialize threshold/sensitivity/M/B now, will be changed upon receiving user settings
-THRESHOLD = 1.5
+THRESHOLD = 2
 SENSITIVITY = 3
 M=0
 B=0
@@ -52,7 +52,7 @@ avgMicPower = 0
 micPower = 0
 
 # arrays to hold data over time for graphs
-outputPowerData = []
+inputPowerData = []
 micPowerData = []
 expectedMicPowerData = []
 avgExpectedMicPowerData = []
@@ -77,7 +77,8 @@ spi.max_speed_hz = 7629
 # Calibrate wrapper with print statements for user
 def runCalibration():
     # Run through calibration process
-    m, b = calibrate(False)
+    write_pot_value(BASE_POT_VALUE)
+    m, b = calibrate(True)
     print("Completed calibration stage and received the following parameters:")
     print("\tM = " + str(m))
     print("\tB = " + str(b))
@@ -97,15 +98,14 @@ def convertPotValueToScale(new_pot_value):
 # input callback function to deal with audio in
 # handles the input power calculation & the expected mic power calculation
 def input_callback(in_data, frame_count, time_info, status):
-    global avgExpectedMicPower, avgMicPower, pot_value, outputPowerData
-    
+    global avgExpectedMicPower, avgMicPower, pot_value, inputPowerData
     
     scale = convertPotValueToScale(pot_value)        # calculate expected scale from pot value
-    out_data = audioop.mul(in_data, 2, scale)        # calculate expected out data by multiplying the input data by the scale factor
-    outputPower = audioop.rms(out_data, 2)            # calculate the output power
-    outputPowerData.append(outputPower)   
     
-    expectedMicPower = M*outputPower + B             # calculate expected mic power from out power
+    inputPower = audioop.rms(in_data, 2)            # calculate the input power
+    inputPowerData.append(inputPower)   
+    
+    expectedMicPower = M*inputPower + B             # calculate expected mic power from out power
     expectedMicPowerData.append(expectedMicPower)
     
     avgExpectedMicPower = 0.01*expectedMicPower + 0.99*avgExpectedMicPower
@@ -140,13 +140,12 @@ def mic_callback(mic_data, frame_count, time_info, status):
     return(mic_data, pyaudio.paContinue)
 
 
-def listen(cal_slope, cal_intercept, threshold, sensitivity, listen_seconds=20):
+def listen(cal_slope, cal_intercept, sensitivity, listen_seconds=20):
     # set the M and B parameters of the calibration graph
     global M,B
-    M = cal_slope
+    M = cal_slope*1.1
     B = cal_intercept
     
-    THRESHOLD = threshold
     SENSITIVITY = sensitivity
     CHUNK = sensitivityMap[SENSITIVITY]
     
@@ -195,6 +194,7 @@ def listen(cal_slope, cal_intercept, threshold, sensitivity, listen_seconds=20):
     # Power data plot
     micPowerTimeVals = getTimeValues(RATE, CHUNK, len(micPowerData))
     expectedMicPowerTimeVals = getTimeValues(RATE/CHUNK, 1, len(expectedMicPowerData))
+    inputPowerTimeVals = getTimeValues(RATE/CHUNK, 1, len(inputPowerData))
     micPowerFig = plt.figure(figsize=(30,10))
     micPowerFig.suptitle('Mic Power & Expected Mic Power over Time', fontsize=14, fontweight='bold')
     micPowerPlot, = plt.plot(micPowerTimeVals, 
@@ -203,9 +203,12 @@ def listen(cal_slope, cal_intercept, threshold, sensitivity, listen_seconds=20):
     expMicPowerPlot, = plt.plot(expectedMicPowerTimeVals, 
                                 expectedMicPowerData,
                                 label="Expected Mic Power")
+    inputPowerPlot, = plt.plot(inputPowerTimeVals, 
+                                inputPowerData,
+                                label="Input Power")
     plt.xlabel('Time (s)')
     plt.ylabel('UNITS')
-    plt.legend(handles=[micPowerPlot, expMicPowerPlot])
+    plt.legend(handles=[micPowerPlot, expMicPowerPlot, inputPowerPlot])
 
     # Plot of moving average of power
     avgMicPowerTimeVals = getTimeValues(RATE, CHUNK, len(avgMicPowerData))

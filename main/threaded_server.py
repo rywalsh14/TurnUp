@@ -1,18 +1,17 @@
 import sys, os
 sys.path.append(os.path.abspath(".."))
 sys.path.append(os.path.abspath("../calibration"))
-from calibrate import calibrate
 from listen_tools import runCalibration, listen
 import socket
 import threading
 import json
 
-LISTEN_SECONDS = 20
+LISTEN_SECONDS = 30
 
 flowLock = threading.Lock()
 
 DEVICE_NAME = "TurnUp 1"
-SETTINGS_SERVER_PORT = 9999
+SETTINGS_SERVER_PORT = 8123
 BUFFER_SIZE = 1024
 
 UDP_IP = '' # Empty to bind to any available interface
@@ -147,11 +146,10 @@ def TCPserver():
                 flowLock.acquire()
                 print("Recived SETTINGS message from user")
                 print("Received the following settings:")
-                print("\tThreshold:\t%f" %(userMessage["threshold"]))
                 print("\tSensitivity:\t%d\n" %(userMessage["sensitivity"]))
                 print("NOW BEGINNING LISTENING PROCESS\n")
                 if didCalibrate:
-                    listen(M, B, userMessage["threshold"], userMessage["sensitivity"], LISTEN_SECONDS)
+                    listen(M, B, userMessage["sensitivity"], LISTEN_SECONDS)
                 else:
                     print("DID NOT PROPERLY CALIBRATE")
                 flowLock.release()
