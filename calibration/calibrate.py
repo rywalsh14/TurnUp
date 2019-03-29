@@ -83,7 +83,9 @@ def calibrate(plot=False):
     
     
     # get linear relationship... get min length first so dimensions match in the linear fit
-    minLength = int(min(0.9*len(calibrateIntensityData), 0.9*len(micIntensityData)))
+    minLength = min(len(calibrateIntensityData), len(micIntensityData))
+    
+    #scaledDownMinLength = int(0.9*minLength)
     
     m, b = np.polyfit(calibrateIntensityData[0:minLength], micIntensityData[0:minLength], 1)
     #m *= 1.1
@@ -120,8 +122,8 @@ def calibrate(plot=False):
         # Mic Pickup Power vs. Input Signal Power graph
         powerFig = plt.figure(figsize=(30,4))
         powerFig.suptitle('Mic Pickup Intensity vs. Input Signal Intensity', fontsize=14, fontweight='bold')
-        powerDataPoints, = plt.plot(calibrateIntensityData, 
-                                   micIntensityData[0:len(calibrateIntensityData)], 
+        powerDataPoints, = plt.plot(calibrateIntensityData[0:minLength], 
+                                   micIntensityData[0:minLength], 
                                    'o',
                                    color="orange",
                                    label="Intensity Data Points")

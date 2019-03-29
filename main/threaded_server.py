@@ -11,7 +11,7 @@ LISTEN_SECONDS = 30
 flowLock = threading.Lock()
 
 DEVICE_NAME = "TurnUp 1"
-SETTINGS_SERVER_PORT = 8123
+SETTINGS_SERVER_PORT = 8144
 BUFFER_SIZE = 1024
 
 UDP_IP = '' # Empty to bind to any available interface
