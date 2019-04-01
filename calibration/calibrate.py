@@ -13,7 +13,8 @@ from utils import getInputDeviceID, getMicDeviceID, getTimeValues
 import sounddevice as sd
 
 
-FORMAT = pyaudio.paInt16
+MIC_FORMAT = pyaudio.paInt16
+INPUT_FORMAT = pyaudio.paInt24
 CHANNELS = 1
 RATE = 44100
 CHUNK = 512
@@ -39,6 +40,7 @@ def mic_callback(mic_data, frame_count, time_info, status):
     micIntensityData.append(micIntensity)
     return(mic_data, pyaudio.paContinue)
 
+
 def input_callback(in_data, frame_count, time_info, status):
     calibrateIntensity = audioop.rms(in_data, 2)    # take rms over this chunk of mic data
     calibrateIntensityData.append(calibrateIntensity)
@@ -46,7 +48,7 @@ def input_callback(in_data, frame_count, time_info, status):
     
 
 def calibrate(plot=False):
-    os.system("amixer set PCM 68%")     # set the internal pi volume control to 35 (somehow 74% results in 35)
+    os.system("amixer set PCM 80%")     # set the internal pi volume control to 35 (somehow 74% results in 35)
     audio = pyaudio.PyAudio()
 
     # FOR MAC - built-in mic has device ID 0, USB Audio device has device ID 2
@@ -54,7 +56,7 @@ def calibrate(plot=False):
     # Open input stream source
     
     # Open mic stream souce
-    micStream = audio.open(format=FORMAT, 
+    micStream = audio.open(format=MIC_FORMAT, 
                         input_device_index=getMicDeviceID(audio),
                         channels=1,
                         rate=RATE, 
@@ -62,7 +64,7 @@ def calibrate(plot=False):
                         frames_per_buffer=CHUNK,
                         stream_callback=mic_callback)
     
-    inputStream = audio.open(format=FORMAT, 
+    inputStream = audio.open(format=INPUT_FORMAT, 
                         input_device_index=getInputDeviceID(audio),
                         channels=CHANNELS,
                         rate=RATE, 

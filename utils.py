@@ -14,7 +14,8 @@ def getInputDeviceID(audio):
     numdevices = info.get('deviceCount')
     for i in range(0, numdevices):
         name = audio.get_device_info_by_host_api_device_index(0, i).get('name')
-        if "C-Media USB Headphone Set" in name:
+        #if "C-Media USB Headphone Set" in name:
+        if "USB Audio Device" in name:
             return i
     return -1
 

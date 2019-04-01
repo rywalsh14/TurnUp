@@ -141,6 +141,33 @@ def TCPserver():
                     M,B = runCalibration()
                 didCalibrate = True
                 flowLock.release()
+            elif userMessage["type"] == "load_calibrate":
+                flowLock.acquire()
+                print("Received LOAD_CALIBRATE message from user\n")
+                
+                calibration_load_success = False
+                
+                try:
+                    with open('calibration_parameters.json') as parameterFile:
+                        parameters = json.load(parameterFile)
+                    M = parameters['M']
+                    B = parameters['B']
+                    print("Loaded the following parameters:")
+                    print("\tM = " + str(M))
+                    print("\tB = " + str(B))
+                    calibration_load_success = True
+                except IOError as e:
+                    print("Can't load parameters")
+                
+                responseData = {
+                    "calibration_load_success": calibration_load_success   
+                }
+                responseMessage = bytes(json.dumps(responseData), 'utf-8')
+                conn.sendall(responseMessage)
+                
+                didCalibrate = True
+                flowLock.release()
+                
             elif userMessage["type"] == "settings":
                 # extrapolate and store the user settings in the system
                 flowLock.acquire()

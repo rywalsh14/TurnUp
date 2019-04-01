@@ -16,7 +16,8 @@ from calibrate import calibrate
 from utils import getInputDeviceID, getMicDeviceID, getTimeValues
 
 
-FORMAT = pyaudio.paInt16
+MIC_FORMAT = pyaudio.paInt16
+INPUT_FORMAT = pyaudio.paInt24
 CHANNELS = 1
 RATE = 44100
 CHUNK = 512
@@ -158,7 +159,7 @@ def listen(cal_slope, cal_intercept, sensitivity, listen_seconds=20):
     # FOR MAC - built-in mic has device ID 0, USB Audio device has device ID 2
     # FOR PI - input audio has device ID 2, mic audio has device ID 3
     # Open input stream source
-    inputStream = audio.open(format=FORMAT, 
+    inputStream = audio.open(format=INPUT_FORMAT, 
                         input_device_index=getInputDeviceID(audio),
                         channels=CHANNELS,
                         rate=RATE, 
@@ -168,7 +169,7 @@ def listen(cal_slope, cal_intercept, sensitivity, listen_seconds=20):
 
 
     # Open mic stream souce
-    micStream = audio.open(format=FORMAT, 
+    micStream = audio.open(format=MIC_FORMAT, 
                         input_device_index=getMicDeviceID(audio),
                         channels=CHANNELS,
                         rate=RATE, 
