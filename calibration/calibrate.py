@@ -24,16 +24,17 @@ CALIBRATION_WAVE_FILE = "/home/pi/Developer/TurnUp/calibration/calibration.wav"
 # read the wav file into a numpy array so that this array may be played as a sound device object
 cal_fs, cal_array = wavfile.read(CALIBRATION_WAVE_FILE)
 
-# load the calibration power data
-#with open('calibration_power_512.json') as calibratePowerFile:
-#    calDictionary = json.load(calibratePowerFile)
-#calibratePowerData = calDictionary['calibratePowerData']
-
 # initialize the mic intensity data array
 micIntensityData = []
 
 # initialize cal intensity array
 calibrateIntensityData = []
+
+def resetCalibrateData():
+    global micIntensityData, calibrateIntensityData
+    micIntensityData = []
+    calibrateIntensityData = []
+
 
 def mic_callback(mic_data, frame_count, time_info, status):
     micIntensity = audioop.rms(mic_data, 2)    # take rms over this chunk of mic data
@@ -139,6 +140,7 @@ def calibrate(plot=False):
         print("Done!")
         plt.show()
         
+    resetCalibrateData()
     return (m, b)    
 
 

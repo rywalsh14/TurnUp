@@ -1,7 +1,7 @@
 import sys, os
 sys.path.append(os.path.abspath(".."))
 sys.path.append(os.path.abspath("../calibration"))
-from listen_tools import runCalibration, listen
+from listen_tools import runCalibration, listen, stopListening
 import socket
 import threading
 import json
@@ -91,9 +91,16 @@ def UDPserver():
 
 
 def TCPserver():
+    # sensitivity will be set by user later
+    sensitivity = 0
     M = 0
     B = 0
     didCalibrate = False
+    didReceiveUserSettings = False
+    
+    # declare listen thread
+    listen_thread = None
+    
     # Set up the main device server to receive user settings data from a user phone
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s.bind(("", SETTINGS_SERVER_PORT))  # open up a socket that anyone may connect to
@@ -171,19 +178,42 @@ def TCPserver():
             elif userMessage["type"] == "settings":
                 # extrapolate and store the user settings in the system
                 flowLock.acquire()
-                print("Recived SETTINGS message from user")
+                print("Recived SETTINGS message from user\n")
                 print("Received the following settings:")
                 print("\tSensitivity:\t%d\n" %(userMessage["sensitivity"]))
-                print("NOW BEGINNING LISTENING PROCESS\n")
                 if didCalibrate:
-                    listen(M, B, userMessage["sensitivity"], LISTEN_SECONDS)
+                    sensitivity = userMessage["sensitivity"]
+                    didReceiveUserSettings = True
                 else:
-                    print("DID NOT PROPERLY CALIBRATE")
+                    print("DID NOT PROPERLY CALIBRATE\n")
                 flowLock.release()
+            
+            elif userMessage["type"] == "start_listening":
+                flowLock.acquire()
+                print("Received START LISTENING message from user\n")
+                flowLock.release()
+                if didReceiveUserSettings:
+                    listen_thread = threading.Thread(target=listen, args=(M, B, sensitivity))
+                    listen_thread.start()
+                else:
+                    flowLock.acquire()
+                    print("DID NOT PROPERLY RECEIVE USER SETTINGS\n")
+                    flowLock.release()
+                
+            elif userMessage["type"] == "stop_listening":
+                flowLock.acquire()
+                print("Received STOP LISTENING message from user")
+                stopListening()
+                listen_thread.join()
+                print("Successfully stopped listening\n")
+                flowLock.release()
+                
+            
             else:
                 flowLock.acquire()
                 print("Received invalid message from user (neither calibrate nor settings message\n)")
                 flowLock.release()
+                
         conn.close()
 
 

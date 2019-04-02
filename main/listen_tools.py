@@ -22,6 +22,9 @@ CHANNELS = 1
 RATE = 44100
 CHUNK = 512
 
+# variable to control when device should listen/stop listening
+LISTEN_ACTIVE = False
+
 # initialize threshold/sensitivity/M/B now, will be changed upon receiving user settings
 THRESHOLD = 2
 SENSITIVITY = 3
@@ -140,11 +143,40 @@ def mic_callback(mic_data, frame_count, time_info, status):
     micPowerData.append(micPower)
     return(mic_data, pyaudio.paContinue)
 
+# used to reset all used data for functionality/plotting, etc. so that system starts fresh on the next listen
+def resetListenData():
+    global inputPowerData, micPowerData, expectedMicPowerData
+    global avgExpectedMicPowerData, avgMicPowerData
+    global scaleData, potValData, ratioData
+    global pot_value
+    
+    # reset the digital potentiometer
+    pot_value = BASE_POT_VALUE
+    write_pot_value(pot_value)
+    
+    # reset moving averages
+    avgExpectedMicPower = 0
+    avgMicPower = 0
+    
+    # reset all of the data arrays
+    inputPowerData = []
+    micPowerData = []
+    expectedMicPowerData = []
+    avgExpectedMicPowerData = []
+    avgMicPowerData = []
+    scaleData = []
+    potValData = []
+    ratioData = []
 
-def listen(cal_slope, cal_intercept, sensitivity, listen_seconds=20):
+def stopListening():
+    global LISTEN_ACTIVE
+    LISTEN_ACTIVE = False
+
+def listen(cal_slope, cal_intercept, sensitivity):
     # set the M and B parameters of the calibration graph
-    global M,B
-    M = cal_slope*1.1
+    global M,B, LISTEN_ACTIVE
+    #M = cal_slope*1.1
+    M = cal_slope
     B = cal_intercept
     
     SENSITIVITY = sensitivity
@@ -177,14 +209,17 @@ def listen(cal_slope, cal_intercept, sensitivity, listen_seconds=20):
                         frames_per_buffer=CHUNK,
                         stream_callback=mic_callback)
 
+    print("Beginning listening...")
     inputStream.start_stream()
     micStream.start_stream()
-
-    while inputStream.is_active():
-        print("Beginning listening...")
-        time.sleep(listen_seconds)
-        inputStream.stop_stream()
-
+    
+    LISTEN_ACTIVE = True
+    
+    # run until LISTEN_ACTIVE is set false by stopListening
+    while LISTEN_ACTIVE:
+        pass
+    
+    inputStream.stop_stream()
     micStream.stop_stream()
     micStream.close()
     inputStream.close()
@@ -257,4 +292,5 @@ def listen(cal_slope, cal_intercept, sensitivity, listen_seconds=20):
     plt.ylabel('Potentiometer Value Magnitude')
 
     plt.show()
+    resetListenData()
     
