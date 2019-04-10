@@ -37,6 +37,20 @@ SENSITIVITY = 3
 M=0
 B=0
 
+# goal ratio to amplify until for amplification
+HIGH_AMP_GOAL_RATIO = 1.5
+LOW_AMP_GOAL_RATIO = 1.25
+
+# Define states
+NORMAL = 0
+OVER_LIMIT_TIMING = 1
+INCREASE_AMPLIFICATION = 2
+STABLE_AMPLIFYING = 3
+UNDER_LIMIT_TIMING = 4
+DECREASE_AMPLIFICATION = 5
+state = NORMAL
+nextState = NORMAL
+
 MOVING_AVG_SMALL_WEIGHT = 0.1
 MOVING_AVG_LARGE_WEIGHT = 0.9
 
@@ -106,7 +120,7 @@ def convertPotValueToScale(new_pot_value):
     global BASE_POT_VALUE, BASE_STRENGTH_PERCENTAGE
     new_strength_percentage = (255 - new_pot_value)/255
     return new_strength_percentage/BASE_STRENGTH_PERCENTAGE
-    
+
 firstTime = True
 
 # input callback function to deal with audio in
@@ -115,8 +129,10 @@ def input_callback(in_data, frame_count, time_info, status):
     global firstTime, timer, trackingTime, THRESH_TIME_LIMIT, pastThreshold
     global avgExpectedMicPower, avgMicPower, pot_value, inputPowerData
     global MOVING_AVG_SMALL_WEIGHT, MOVING_AVG_LARGE_WEIGHT
+    global state, nextState
     
     scale = convertPotValueToScale(pot_value)        # calculate expected scale from pot value
+    scaleData.append(scale)
     
     inputPower = audioop.rms(in_data, 2)            # calculate the input power
     inputPowerData.append(inputPower)   
@@ -131,36 +147,67 @@ def input_callback(in_data, frame_count, time_info, status):
     
     ratio = avgMicPower/avgExpectedMicPower
     ratioData.append(ratio)
-    
-    if ratio > THRESHOLD:
-        # Decrement pot value --> increase amplification
-        # Make sure pot value doesn't go under minimum
 
-        if not trackingTime:
-            # THIS MEANS it just crossed threshold, start keeping time
-            trackingTime = True     # set true
-            timer = time.time()     # start timer
+    # set the state before evaluating
+    state = nextState
 
-        # if it has been past the threshold for longer than the time limit
-        elif time.time() - timer >= THRESH_TIME_LIMIT:
-            # ADDED THIS TO LOG WHEN IT WAS STARTING TO INCREASE
-            if firstTime:
-                firstTime = False
-                print("Amplifying after being over threshold for timer: %s" % str(time.time()-timer))
-            # if past the time limit, start increasing
+    if state==NORMAL:
+        # if ratio crosses threshold, start timing and set next state to timing state
+        if ratio > THRESHOLD:
+            nextState = OVER_LIMIT_TIMING
+            timer = time.time()
+
+    elif state==OVER_LIMIT_TIMING:
+        # if over time limit, move to amplification state
+        if time.time() - timer > THRESH_TIME_LIMIT:
+            print("Amplifying after being over threshold for timer: %s" % str(time.time()-timer))
+            nextState = INCREASE_AMPLIFICATION
+        elif ratio < THRESHOLD:
+            nextState = NORMAL
+
+    elif state==INCREASE_AMPLIFICATION:
+        # if reached goal, go to stable amplification state
+        if ratio <= HIGH_AMP_GOAL_RATIO:
+            nextState = STABLE_AMPLIFYING
+        # otherwise, increase amplification by decrementing pot value
+        else:
             pot_value = max(pot_value-1, MIN_POT_VALUE)
             write_pot_value(pot_value)
-        
-    elif pot_value < BASE_POT_VALUE:
-        firstTime = True
-        trackingTime = False
-        # If pot value lower than base (i.e. output is LOUDER than regular "no ambient noise" state,
-        # Increment pot value and write it
-        pot_value += 1
-        write_pot_value(pot_value)
-    scaleData.append(scale)
+
+    elif state==STABLE_AMPLIFYING:
+        # stay in this state unless we cross threshold, or go below Low ratio goal
+        # if cross threshold again, go directly to amplification
+        # OR SHOULD WE GO TO TIMING?
+        if ratio > THRESHOLD:
+            nextState = INCREASE_AMPLIFICATION
+        # if we go under low ratio goal, start timing and set next state to timing state
+        elif ratio <= LOW_AMP_GOAL_RATIO:
+            timer = time.time()
+            nextState = UNDER_LIMIT_TIMING
+
+    elif state==UNDER_LIMIT_TIMING:
+        # if crosses 1.25, go back to stable amplification
+        # MAYBE USE HIGH GOAL RATIO
+        if ratio > LOW_AMP_GOAL_RATIO:
+            nextState = STABLE_AMPLIFYING
+        elif time.time() - timer > THRESH_TIME_LIMIT:
+            # if we pass time limit, go to de-amplify state
+            nextState = DECREASE_AMPLIFICATION
+
+    elif state==DECREASE_AMPLIFICATION:
+        # if crosses back over ratio
+        # MAYBE USE HIGH GOAL RATIO
+        if ratio > LOW_AMP_GOAL_RATIO:
+            nextState = STABLE_AMPLIFYING
+        else:
+            # Decrease amplification by increasing pot value
+            pot_value = min(pot_value+1, BASE_POT_VALUE)
+            write_pot_value(pot_value)
+            # if we have reached the normal pot value, return to normal state
+            if pot_value == BASE_POT_VALUE:
+                nextState = NORMAL
+
     potValData.append(pot_value)
-    
     return(in_data, pyaudio.paContinue)
 
 

@@ -5,6 +5,9 @@ from new_listen_tools import runCalibration, listen, stopListening
 import socket
 import threading
 import json
+import RPi.GPIO as GPIO
+GPIO.setmode(GPIO.BCM)
+GPIO.setup(25, GPIO.OUT)
 
 LISTEN_SECONDS = 30
 
@@ -145,6 +148,8 @@ def TCPserver():
                     except IOError as e:
                         print("Can't load parameters")
                 else:
+                    # choose input B
+                    GPIO.output(25, 1)
                     M,B = runCalibration()
                 didCalibrate = True
                 flowLock.release()
@@ -193,6 +198,7 @@ def TCPserver():
                 print("Received START LISTENING message from user\n")
                 flowLock.release()
                 if didReceiveUserSettings:
+                    GPIO.output(25, 0)
                     listen_thread = threading.Thread(target=listen, args=(M, B, sensitivity))
                     listen_thread.start()
                 else:
