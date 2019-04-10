@@ -20,7 +20,13 @@ MIC_FORMAT = pyaudio.paInt16
 INPUT_FORMAT = pyaudio.paInt24
 CHANNELS = 1
 RATE = 44100
-CHUNK = 512
+
+CHUNK = 1024
+
+THRESH_TIME_LIMIT = 5
+trackingTime = False
+
+timer = time.time()
 
 # variable to control when device should listen/stop listening
 LISTEN_ACTIVE = False
@@ -31,12 +37,15 @@ SENSITIVITY = 3
 M=0
 B=0
 
+MOVING_AVG_SMALL_WEIGHT = 0.1
+MOVING_AVG_LARGE_WEIGHT = 0.9
+
 sensitivityMap = {
-    1: 4096,
-    2: 2048,
-    3: 1024,
-    4: 512,
-    5: 256
+    1: 8,
+    2: 6,
+    3: 4,
+    4: 2,
+    5: 0
 }
 
 # potentiometer base value & strength percentage
@@ -98,11 +107,14 @@ def convertPotValueToScale(new_pot_value):
     new_strength_percentage = (255 - new_pot_value)/255
     return new_strength_percentage/BASE_STRENGTH_PERCENTAGE
     
+firstTime = True
 
 # input callback function to deal with audio in
 # handles the input power calculation & the expected mic power calculation
 def input_callback(in_data, frame_count, time_info, status):
+    global firstTime, timer, trackingTime, THRESH_TIME_LIMIT, pastThreshold
     global avgExpectedMicPower, avgMicPower, pot_value, inputPowerData
+    global MOVING_AVG_SMALL_WEIGHT, MOVING_AVG_LARGE_WEIGHT
     
     scale = convertPotValueToScale(pot_value)        # calculate expected scale from pot value
     
@@ -112,8 +124,8 @@ def input_callback(in_data, frame_count, time_info, status):
     expectedMicPower = M*inputPower + B             # calculate expected mic power from out power
     expectedMicPowerData.append(expectedMicPower)
     
-    avgExpectedMicPower = 0.01*expectedMicPower + 0.99*avgExpectedMicPower
-    avgMicPower = 0.01*micPower + 0.99*avgMicPower
+    avgExpectedMicPower = MOVING_AVG_SMALL_WEIGHT*expectedMicPower + MOVING_AVG_LARGE_WEIGHT*avgExpectedMicPower
+    avgMicPower = MOVING_AVG_SMALL_WEIGHT*micPower + MOVING_AVG_LARGE_WEIGHT*avgMicPower
     avgExpectedMicPowerData.append(avgExpectedMicPower)
     avgMicPowerData.append(avgMicPower)
     
@@ -123,9 +135,25 @@ def input_callback(in_data, frame_count, time_info, status):
     if ratio > THRESHOLD:
         # Decrement pot value --> increase amplification
         # Make sure pot value doesn't go under minimum
-        pot_value = max(pot_value-1, MIN_POT_VALUE)
-        write_pot_value(pot_value)
+
+        if not trackingTime:
+            # THIS MEANS it just crossed threshold, start keeping time
+            trackingTime = True     # set true
+            timer = time.time()     # start timer
+
+        # if it has been past the threshold for longer than the time limit
+        elif time.time() - timer >= THRESH_TIME_LIMIT:
+            # ADDED THIS TO LOG WHEN IT WAS STARTING TO INCREASE
+            if firstTime:
+                firstTime = False
+                print("Amplifying after being over threshold for timer: %s" % str(time.time()-timer))
+            # if past the time limit, start increasing
+            pot_value = max(pot_value-1, MIN_POT_VALUE)
+            write_pot_value(pot_value)
+        
     elif pot_value < BASE_POT_VALUE:
+        firstTime = True
+        trackingTime = False
         # If pot value lower than base (i.e. output is LOUDER than regular "no ambient noise" state,
         # Increment pot value and write it
         pot_value += 1
@@ -174,13 +202,13 @@ def stopListening():
 
 def listen(cal_slope, cal_intercept, sensitivity):
     # set the M and B parameters of the calibration graph
-    global M,B, LISTEN_ACTIVE
+    global M,B, LISTEN_ACTIVE, SENSITIVITY, THRESH_TIME_LIMIT
     #M = cal_slope*1.1
     M = cal_slope
     B = cal_intercept
     
     SENSITIVITY = sensitivity
-    CHUNK = sensitivityMap[SENSITIVITY]
+    THRESH_TIME_LIMIT = sensitivityMap[SENSITIVITY]
     
     print("Set the system's sensitivity to %s\n" % (SENSITIVITY))
     
@@ -297,4 +325,5 @@ def listen(cal_slope, cal_intercept, sensitivity):
     scaleRatioFig.savefig('./plots/l_ratio_etc.png')
     
     resetListenData()
+    
     

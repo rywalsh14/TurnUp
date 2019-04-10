@@ -107,6 +107,9 @@ def calibrate(plot=False):
             y.append(m*x[i]+b)
 
         micTimeValues = getTimeValues(RATE, CHUNK, len(micIntensityData))
+        calibrateTimeValues = getTimeValues(RATE, CHUNK, len(calibrateIntensityData))
+        
+        """
         # Mic power over time plot
         micIntensityFig = plt.figure(figsize=(30,4))
         micIntensityFig.suptitle('Mic Intensity over Time', fontsize=14, fontweight='bold')
@@ -114,16 +117,18 @@ def calibrate(plot=False):
         plt.xlabel('Time (s)')
         plt.ylabel('Relative Fraction of Maximum Intensity')
 
-        calibrateTimeValues = getTimeValues(RATE, CHUNK, len(calibrateIntensityData))
+        
         # Calibrate signal power over time plot
         calibrateIntensityFig = plt.figure(figsize=(30,4))
         calibrateIntensityFig.suptitle('Calibrate Signal Intensity over Time', fontsize=14, fontweight='bold')
         plt.plot(calibrateTimeValues, calibrateIntensityData)
         plt.xlabel('Time (s)')
         plt.ylabel('Relative Fraction of Maximum Intensity')
+        
+        """
 
         # Mic Pickup Power vs. Input Signal Power graph
-        powerFig = plt.figure(figsize=(30,4))
+        powerFig = plt.figure(figsize=(18,6))
         powerFig.suptitle('Mic Pickup Intensity vs. Input Signal Intensity', fontsize=14, fontweight='bold')
         powerDataPoints, = plt.plot(calibrateIntensityData[0:minLength], 
                                    micIntensityData[0:minLength], 
@@ -137,8 +142,29 @@ def calibrate(plot=False):
         plt.xlabel('Relative Fraction of Maximum Intensity')
         plt.ylabel('Relative Fraction of Maximum Intensity')
         plt.legend(handles=[powerDataPoints, bestFit])
+        
+        
+        intensitiesFig = plt.figure(figsize=(18,12))
+        intensitiesFig.suptitle('Calibration Graph', fontsize=14, fontweight='bold')
+
+        # First plot mic
+        plt.subplot(211)
+        plt.plot(micTimeValues, micIntensityData, color="tab:blue")
+        plt.ylabel('Microphone Pickup Intensity')
+
+        # Now plot the input on a separate Subplot
+        plt.subplot(212)
+        plt.plot(calibrateTimeValues, calibrateIntensityData, color="tab:orange")
+        plt.xlabel('Time (s)')
+        plt.ylabel('System Input Intensity')
+        
         print("Done!")
-        plt.show()
+                
+        intensitiesFig.savefig('./plots/c_mic_and_input_intensity.png')
+        powerFig.savefig('./plots/c_calibration_graph.png')
+        
+        
+        #plt.show()
         
     resetCalibrateData()
     return (m, b)    

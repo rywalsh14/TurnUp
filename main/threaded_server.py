@@ -1,7 +1,7 @@
 import sys, os
 sys.path.append(os.path.abspath(".."))
 sys.path.append(os.path.abspath("../calibration"))
-from listen_tools import runCalibration, listen, stopListening
+from new_listen_tools import runCalibration, listen, stopListening
 import socket
 import threading
 import json
@@ -50,7 +50,7 @@ def UDPserver():
                 CLIENT_CONNECT_ADDRESS = address[0]     # extract the client address from the socket data
                 if (CLIENT_CONNECT_ADDRESS is not None):
                     flowLock.acquire()
-                    print("Received discovery message from %s:%d\n" % (CLIENT_CONNECT_ADDRESS, CLIENT_CONNECT_PORT))
+                    print("Received discovery message from %s:%d\n" % (CLIENT_CONNECT_ADDRESS, address[1]))
                     flowLock.release()
                     break
             except:     # ignore the UDP message and continue listening for discovery message
