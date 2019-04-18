@@ -6,7 +6,6 @@ import wave
 from matplotlib import pyplot as plt
 from scipy import signal
 from scipy.io import wavfile
-from termcolor import colored
 import audioop
 import numpy as np
 import time
@@ -14,7 +13,10 @@ import json
 import spidev
 from calibrate import calibrate
 from utils import getInputDeviceID, getMicDeviceID, getTimeValues
+from Adafruit_LED_Backpack.SevenSegment import SevenSegment
 
+
+segment = SevenSegment()
 
 MIC_FORMAT = pyaudio.paInt16
 INPUT_FORMAT = pyaudio.paInt24
@@ -88,6 +90,19 @@ scaleData = []
 potValData = []
 ratioData = []
 
+def setDisplayToScale(scale):
+    digit1 = int(scale/10)
+    digit2 = int(scale)%10
+    digit3 = int((scale - int(scale)) * 10)
+    
+    if digit1 != 0:
+        segment.set_digit(1, digit1)
+    segment.set_digit(2, digit2)
+    segment.set_digit(3, digit3)
+    segment.set_fixed_decimal(True)
+    
+    segment.write_display()
+
 # Split integer pot value into a two byte array to send via SPI
 def write_pot_value(pot_value):
     spi_data = pot_value + 4352    # 4352 = 0x1100, which are the spi command bits we need to append to the pot value
@@ -133,6 +148,7 @@ def input_callback(in_data, frame_count, time_info, status):
     
     scale = convertPotValueToScale(pot_value)        # calculate expected scale from pot value
     scaleData.append(scale)
+    setDisplayToScale(scale)
     
     inputPower = audioop.rms(in_data, 2)            # calculate the input power
     inputPowerData.append(inputPower)   
@@ -262,6 +278,8 @@ def listen(cal_slope, cal_intercept, sensitivity):
     
     # Begin main thread of code
     audio = pyaudio.PyAudio()
+    segment.begin()
+    
 
     # FOR MAC - built-in mic has device ID 0, USB Audio device has device ID 2
     # FOR PI - input audio has device ID 2, mic audio has device ID 3
@@ -304,8 +322,8 @@ def listen(cal_slope, cal_intercept, sensitivity):
 
     # Power data plot
     micPowerTimeVals = getTimeValues(RATE, CHUNK, len(micPowerData))
-    expectedMicPowerTimeVals = getTimeValues(RATE/CHUNK, 1, len(expectedMicPowerData))
-    inputPowerTimeVals = getTimeValues(RATE/CHUNK, 1, len(inputPowerData))
+    expectedMicPowerTimeVals = getTimeValues(RATE/(CHUNK*2), 1, len(expectedMicPowerData))
+    inputPowerTimeVals = getTimeValues(RATE/(CHUNK*2), 1, len(inputPowerData))
     micPowerFig = plt.figure(figsize=(18,6))
     micPowerFig.suptitle('Mic Power & Expected Mic Power over Time', fontsize=14, fontweight='bold')
     micPowerPlot, = plt.plot(micPowerTimeVals, 

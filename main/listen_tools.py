@@ -14,13 +14,15 @@ import json
 import spidev
 from calibrate import calibrate
 from utils import getInputDeviceID, getMicDeviceID, getTimeValues
-
+from Adafruit_LED_Backpack.SevenSegment import SevenSegment
 
 MIC_FORMAT = pyaudio.paInt16
 INPUT_FORMAT = pyaudio.paInt24
 CHANNELS = 1
 RATE = 44100
 CHUNK = 512
+
+segment = SevenSegment()
 
 # variable to control when device should listen/stop listening
 LISTEN_ACTIVE = False
@@ -65,6 +67,19 @@ scaleData = []
 potValData = []
 ratioData = []
 
+def setDisplayToScale(scale):
+    digit1 = int(scale/10)
+    digit2 = int(scale)%10
+    digit3 = int((scale - int(scale)) * 10)
+    
+    if digit1 != 0:
+        segment.set_digit(1, digit1)
+    segment.set_digit(2, digit2)
+    segment.set_digit(3, digit3)
+    segment.set_fixed_decimal(True)
+    
+    segment.write_display()
+
 # Split integer pot value into a two byte array to send via SPI
 def write_pot_value(pot_value):
     spi_data = pot_value + 4352    # 4352 = 0x1100, which are the spi command bits we need to append to the pot value
@@ -105,6 +120,8 @@ def input_callback(in_data, frame_count, time_info, status):
     global avgExpectedMicPower, avgMicPower, pot_value, inputPowerData
     
     scale = convertPotValueToScale(pot_value)        # calculate expected scale from pot value
+    
+    setDisplayToScale(scale)
     
     inputPower = audioop.rms(in_data, 2)            # calculate the input power
     inputPowerData.append(inputPower)   
@@ -187,6 +204,8 @@ def listen(cal_slope, cal_intercept, sensitivity):
     
     # Begin main thread of code
     audio = pyaudio.PyAudio()
+    
+    segment.begin()
 
     # FOR MAC - built-in mic has device ID 0, USB Audio device has device ID 2
     # FOR PI - input audio has device ID 2, mic audio has device ID 3

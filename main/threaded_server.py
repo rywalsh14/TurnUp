@@ -14,11 +14,11 @@ LISTEN_SECONDS = 30
 flowLock = threading.Lock()
 
 DEVICE_NAME = "TurnUp 1"
-SETTINGS_SERVER_PORT = 8144
+SETTINGS_SERVER_PORT = 8145
 BUFFER_SIZE = 1024
 
 UDP_IP = '' # Empty to bind to any available interface
-UDP_PORT = 8111
+UDP_PORT = 8156
 
 CLIENT_CONNECT_ADDRESS = None
 CLIENT_CONNECT_PORT = None  # Client port to send device data back to
@@ -151,6 +151,16 @@ def TCPserver():
                     # choose input B
                     GPIO.output(25, 1)
                     M,B = runCalibration()
+                    GPIO.output(25, 0)
+                    
+                    responseData = {
+                        "calibration_success": True  
+                    }
+                    responseMessage = bytes(json.dumps(responseData), 'utf-8')
+                    conn.sendall(responseMessage)
+                    print("Sent cal response")
+                        
+                    
                 didCalibrate = True
                 flowLock.release()
             elif userMessage["type"] == "load_calibrate":
@@ -222,9 +232,7 @@ def TCPserver():
                 
         conn.close()
 
-
 if __name__ == "__main__":
-    
     UDPthread = threading.Thread(target=UDPserver, args=())
     UDPthread.start()
 
