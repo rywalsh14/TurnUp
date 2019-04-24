@@ -83,6 +83,10 @@ def calibrate(plot=False):
     audio.terminate()
 
     print("Finished listening to calibration signal...")
+    '''
+    for i in range(len(micIntensityData)):
+        micIntensityData[i] = micIntensityData[i]*0.65
+    '''
     
     
     # get linear relationship... get min length first so dimensions match in the linear fit
@@ -90,6 +94,8 @@ def calibrate(plot=False):
     
     #scaledDownMinLength = int(0.9*minLength)
     
+    r = np.corrcoef(calibrateIntensityData[0:minLength], micIntensityData[0:minLength])[1:0]
+    print ("\nr = %s\n" %(str(r)))
     m, b = np.polyfit(calibrateIntensityData[0:minLength], micIntensityData[0:minLength], 1)
     #m *= 1.1
     

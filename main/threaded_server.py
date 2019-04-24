@@ -138,15 +138,31 @@ def TCPserver():
                 print("Received CALIBRATE message from user\n")
                 if bypass_calibration:
                     try:
-                        with open('good_calibration_parameters.json') as parameterFile:
+                        calibration_feet_file = 'calibration_parameters_' + sys.argv[2] + '_ft.json'
+                        with open(calibration_feet_file) as parameterFile:
                             parameters = json.load(parameterFile)
                         M = parameters['M']
                         B = parameters['B']
+                        print("**** Successfully loaded parameters for %s feet ****" %(sys.argv[2]))
                         print("Loaded the following parameters:")
                         print("\tM = " + str(M))
                         print("\tB = " + str(B))
+                        # send success response
+                        responseData = {
+                        "calibration_success": True  
+                        }
+                        responseMessage = bytes(json.dumps(responseData), 'utf-8')
+                        conn.sendall(responseMessage)
+                        print("Sent cal response")
                     except IOError as e:
+                        # send unsuccessful response
                         print("Can't load parameters")
+                        responseData = {
+                        "calibration_success": False  
+                        }
+                        responseMessage = bytes(json.dumps(responseData), 'utf-8')
+                        conn.sendall(responseMessage)
+                        print("Sent cal response")
                 else:
                     # choose input B
                     GPIO.output(25, 1)
@@ -233,6 +249,8 @@ def TCPserver():
         conn.close()
 
 if __name__ == "__main__":
+    if len(sys.argv) == 3:
+        bypass_calibration = True
     UDPthread = threading.Thread(target=UDPserver, args=())
     UDPthread.start()
 

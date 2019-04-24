@@ -50,6 +50,7 @@ INCREASE_AMPLIFICATION = 2
 STABLE_AMPLIFYING = 3
 UNDER_LIMIT_TIMING = 4
 DECREASE_AMPLIFICATION = 5
+SECONDARY_OVER_LIMIT_TIMING = 6
 state = NORMAL
 nextState = NORMAL
 
@@ -89,7 +90,7 @@ avgMicPowerData = []
 scaleData = []
 potValData = []
 ratioData = []
-
+'''
 def setDisplayToScale(scale):
     digit1 = int(scale/10)
     digit2 = int(scale)%10
@@ -102,7 +103,7 @@ def setDisplayToScale(scale):
     segment.set_fixed_decimal(True)
     
     segment.write_display()
-
+'''
 # Split integer pot value into a two byte array to send via SPI
 def write_pot_value(pot_value):
     spi_data = pot_value + 4352    # 4352 = 0x1100, which are the spi command bits we need to append to the pot value
@@ -148,7 +149,7 @@ def input_callback(in_data, frame_count, time_info, status):
     
     scale = convertPotValueToScale(pot_value)        # calculate expected scale from pot value
     scaleData.append(scale)
-    setDisplayToScale(scale)
+    #setDisplayToScale(scale)
     
     inputPower = audioop.rms(in_data, 2)            # calculate the input power
     inputPowerData.append(inputPower)   
@@ -192,14 +193,22 @@ def input_callback(in_data, frame_count, time_info, status):
 
     elif state==STABLE_AMPLIFYING:
         # stay in this state unless we cross threshold, or go below Low ratio goal
-        # if cross threshold again, go directly to amplification
-        # OR SHOULD WE GO TO TIMING?
+        # if cross threshold again, start timing and go to secondary over limit timing state
         if ratio > THRESHOLD:
-            nextState = INCREASE_AMPLIFICATION
+            timer = time.time()
+            nextState = SECONDARY_OVER_LIMIT_TIMING
         # if we go under low ratio goal, start timing and set next state to timing state
         elif ratio <= LOW_AMP_GOAL_RATIO:
             timer = time.time()
             nextState = UNDER_LIMIT_TIMING
+            
+    elif state==SECONDARY_OVER_LIMIT_TIMING:
+        # if back under threshold before timer hits limit, go back to stable amplification
+        if ratio < THRESHOLD:
+            nextState = STABLE_AMPLIFYING
+        # if timer hits limit, go back to increase amplification
+        elif time.time() - timer > THRESH_TIME_LIMIT:
+            nextState = INCREASE_AMPLIFICATION
 
     elif state==UNDER_LIMIT_TIMING:
         # if crosses 1.25, go back to stable amplification
@@ -278,7 +287,7 @@ def listen(cal_slope, cal_intercept, sensitivity):
     
     # Begin main thread of code
     audio = pyaudio.PyAudio()
-    segment.begin()
+    #segment.begin()
     
 
     # FOR MAC - built-in mic has device ID 0, USB Audio device has device ID 2
@@ -322,8 +331,8 @@ def listen(cal_slope, cal_intercept, sensitivity):
 
     # Power data plot
     micPowerTimeVals = getTimeValues(RATE, CHUNK, len(micPowerData))
-    expectedMicPowerTimeVals = getTimeValues(RATE/(CHUNK*2), 1, len(expectedMicPowerData))
-    inputPowerTimeVals = getTimeValues(RATE/(CHUNK*2), 1, len(inputPowerData))
+    expectedMicPowerTimeVals = getTimeValues(RATE/(CHUNK), 1, len(expectedMicPowerData))
+    inputPowerTimeVals = getTimeValues(RATE/(CHUNK), 1, len(inputPowerData))
     micPowerFig = plt.figure(figsize=(18,6))
     micPowerFig.suptitle('Mic Power & Expected Mic Power over Time', fontsize=14, fontweight='bold')
     micPowerPlot, = plt.plot(micPowerTimeVals, 
