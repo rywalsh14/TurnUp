@@ -32,7 +32,6 @@ CLIENT_CONNECT_PORT = None  # Client port to send device data back to
             * now the phone may connect and send user specified settings
 """
 
-bypass_calibration = False
 
 def UDPserver():
     while True:
@@ -104,6 +103,11 @@ def TCPserver():
     # declare listen thread
     listen_thread = None
     
+    if len(sys.argv) == 2:
+        bypass_calibration = True
+    else:
+        bypass_calibration = False
+    
     # Set up the main device server to receive user settings data from a user phone
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s.bind(("", SETTINGS_SERVER_PORT))  # open up a socket that anyone may connect to
@@ -138,12 +142,12 @@ def TCPserver():
                 print("Received CALIBRATE message from user\n")
                 if bypass_calibration:
                     try:
-                        calibration_feet_file = 'calibration_parameters_' + sys.argv[2] + '_ft.json'
+                        calibration_feet_file = 'calibration_parameters_' + sys.argv[1] + '_feet.json'
                         with open(calibration_feet_file) as parameterFile:
                             parameters = json.load(parameterFile)
                         M = parameters['M']
                         B = parameters['B']
-                        print("**** Successfully loaded parameters for %s feet ****" %(sys.argv[2]))
+                        print("**** Successfully loaded parameters for %s feet ****" %(sys.argv[1]))
                         print("Loaded the following parameters:")
                         print("\tM = " + str(M))
                         print("\tB = " + str(B))
@@ -249,8 +253,11 @@ def TCPserver():
         conn.close()
 
 if __name__ == "__main__":
+    '''
+    global bypass_calibration
     if len(sys.argv) == 3:
         bypass_calibration = True
+        '''
     UDPthread = threading.Thread(target=UDPserver, args=())
     UDPthread.start()
 

@@ -14,6 +14,7 @@ import spidev
 from calibrate import calibrate
 from utils import getInputDeviceID, getMicDeviceID, getTimeValues
 from Adafruit_LED_Backpack.SevenSegment import SevenSegment
+from fixed_list import FixedList
 
 
 segment = SevenSegment()
@@ -82,28 +83,28 @@ avgMicPower = 0
 micPower = 0
 
 # arrays to hold data over time for graphs
-inputPowerData = []
-micPowerData = []
-expectedMicPowerData = []
-avgExpectedMicPowerData = []
-avgMicPowerData = []
-scaleData = []
-potValData = []
-ratioData = []
-'''
+fixedInputPowerData = FixedList(CHUNK, 13)
+fixedMicPowerData = FixedList(CHUNK, 30)
+fixedExpectedMicPowerData = FixedList(CHUNK, 13)
+fixedAvgExpectedMicPowerData = FixedList(CHUNK, 13)
+fixedAvgMicPowerData = FixedList(CHUNK, 13)
+fixedScaleData = FixedList(CHUNK, 13)
+fixedPotValData = FixedList(CHUNK, 13)
+fixedRatioData = FixedList(CHUNK, 13)
+
 def setDisplayToScale(scale):
     digit1 = int(scale/10)
     digit2 = int(scale)%10
     digit3 = int((scale - int(scale)) * 10)
     
-    if digit1 != 0:
-        segment.set_digit(1, digit1)
+    #if digit1 != 0:
+    segment.set_digit(1, digit1)
     segment.set_digit(2, digit2)
     segment.set_digit(3, digit3)
     segment.set_fixed_decimal(True)
     
     segment.write_display()
-'''
+
 # Split integer pot value into a two byte array to send via SPI
 def write_pot_value(pot_value):
     spi_data = pot_value + 4352    # 4352 = 0x1100, which are the spi command bits we need to append to the pot value
@@ -139,31 +140,36 @@ def convertPotValueToScale(new_pot_value):
 
 firstTime = True
 
+loopCount = 0
+
 # input callback function to deal with audio in
 # handles the input power calculation & the expected mic power calculation
 def input_callback(in_data, frame_count, time_info, status):
     global firstTime, timer, trackingTime, THRESH_TIME_LIMIT, pastThreshold
-    global avgExpectedMicPower, avgMicPower, pot_value, inputPowerData
+    global avgExpectedMicPower, avgMicPower, pot_value, fixedInputPowerData
     global MOVING_AVG_SMALL_WEIGHT, MOVING_AVG_LARGE_WEIGHT
     global state, nextState
+    global loopCount
+    
+    loopCount += 1
     
     scale = convertPotValueToScale(pot_value)        # calculate expected scale from pot value
-    scaleData.append(scale)
-    #setDisplayToScale(scale)
+    fixedScaleData.append(scale)
+    setDisplayToScale(scale)
     
     inputPower = audioop.rms(in_data, 2)            # calculate the input power
-    inputPowerData.append(inputPower)   
+    fixedInputPowerData.append(inputPower)   
     
     expectedMicPower = M*inputPower + B             # calculate expected mic power from out power
-    expectedMicPowerData.append(expectedMicPower)
+    fixedExpectedMicPowerData.append(expectedMicPower)
     
     avgExpectedMicPower = MOVING_AVG_SMALL_WEIGHT*expectedMicPower + MOVING_AVG_LARGE_WEIGHT*avgExpectedMicPower
     avgMicPower = MOVING_AVG_SMALL_WEIGHT*micPower + MOVING_AVG_LARGE_WEIGHT*avgMicPower
-    avgExpectedMicPowerData.append(avgExpectedMicPower)
-    avgMicPowerData.append(avgMicPower)
+    fixedAvgExpectedMicPowerData.append(avgExpectedMicPower)
+    fixedAvgMicPowerData.append(avgMicPower)
     
     ratio = avgMicPower/avgExpectedMicPower
-    ratioData.append(ratio)
+    fixedRatioData.append(ratio)
 
     # set the state before evaluating
     state = nextState
@@ -232,7 +238,7 @@ def input_callback(in_data, frame_count, time_info, status):
             if pot_value == BASE_POT_VALUE:
                 nextState = NORMAL
 
-    potValData.append(pot_value)
+    fixedPotValData.append(pot_value)
     return(in_data, pyaudio.paContinue)
 
 
@@ -240,7 +246,7 @@ def mic_callback(mic_data, frame_count, time_info, status):
     global micPower
     
     micPower = audioop.rms(mic_data, 2)
-    micPowerData.append(micPower)
+    fixedMicPowerData.append(micPower)
     return(mic_data, pyaudio.paContinue)
 
 # used to reset all used data for functionality/plotting, etc. so that system starts fresh on the next listen
@@ -267,6 +273,17 @@ def resetListenData():
     scaleData = []
     potValData = []
     ratioData = []
+    
+    fixedInputPowerData.reset()
+    fixedMicPowerData.reset()
+    fixedExpectedMicPowerData.reset()
+    fixedAvgExpectedMicPowerData.reset()
+    fixedAvgMicPowerData.reset()
+    fixedScaleData.reset()
+    fixedPotValData.reset()
+    fixedRatioData.reset()
+    
+    
 
 def stopListening():
     global LISTEN_ACTIVE
@@ -274,7 +291,8 @@ def stopListening():
 
 def listen(cal_slope, cal_intercept, sensitivity):
     # set the M and B parameters of the calibration graph
-    global M,B, LISTEN_ACTIVE, SENSITIVITY, THRESH_TIME_LIMIT
+    global M,B, LISTEN_ACTIVE, SENSITIVITY, THRESH_TIME_LIMIT, CHUNK
+    global loopCount
     #M = cal_slope*1.1
     M = cal_slope
     B = cal_intercept
@@ -287,7 +305,7 @@ def listen(cal_slope, cal_intercept, sensitivity):
     
     # Begin main thread of code
     audio = pyaudio.PyAudio()
-    #segment.begin()
+    segment.begin()
     
 
     # FOR MAC - built-in mic has device ID 0, USB Audio device has device ID 2
@@ -328,11 +346,31 @@ def listen(cal_slope, cal_intercept, sensitivity):
     audio.terminate()
 
     print("Finished listening")
-
+    
+    
+    
+    inputPowerData = fixedInputPowerData.toList()
+    micPowerData = fixedMicPowerData.toList()
+    expectedMicPowerData = fixedExpectedMicPowerData.toList()
+    avgExpectedMicPowerData = fixedAvgExpectedMicPowerData.toList()
+    avgMicPowerData = fixedAvgMicPowerData.toList()
+    scaleData = fixedScaleData.toList()
+    potValData = fixedPotValData.toList()
+    ratioData = fixedRatioData.toList()
+    
+    '''
+    print("ARRAY: %s" %(len(scaleData)))
+    print("Count: %s" %(str(loopCount)))
+    '''
+    
     # Power data plot
-    micPowerTimeVals = getTimeValues(RATE, CHUNK, len(micPowerData))
-    expectedMicPowerTimeVals = getTimeValues(RATE/(CHUNK), 1, len(expectedMicPowerData))
-    inputPowerTimeVals = getTimeValues(RATE/(CHUNK), 1, len(inputPowerData))
+    micPowerTimeVals = getTimeValues(RATE, CHUNK, len(micPowerData), False)
+    #expectedMicPowerTimeVals = getTimeValues(RATE/(CHUNK), 1, len(expectedMicPowerData))
+    #inputPowerTimeVals = getTimeValues(RATE/(CHUNK), 1, len(inputPowerData))
+    
+    expectedMicPowerTimeVals = getTimeValues(RATE, CHUNK, len(expectedMicPowerData))
+    inputPowerTimeVals = getTimeValues(RATE, CHUNK, len(inputPowerData))
+    
     micPowerFig = plt.figure(figsize=(18,6))
     micPowerFig.suptitle('Mic Power & Expected Mic Power over Time', fontsize=14, fontweight='bold')
     micPowerPlot, = plt.plot(micPowerTimeVals, 

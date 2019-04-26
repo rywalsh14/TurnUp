@@ -30,8 +30,10 @@ def getMicDeviceID(audio):
     return -1
 
 # returns a linspace of time values that given an array of sample points so that they may be graphed over time
-def getTimeValues(rate, chunk, numPoints):
-    numSamples = numPoints * chunk
-    totalTime = numSamples/rate
+def getTimeValues(rate, chunk, numPoints, expand=True):
+    totalSamples = chunk * numPoints
+    totalTime = totalSamples/rate
+    if expand:
+        totalTime *= 2.3
     t = np.linspace(0, totalTime, numPoints)
     return t
